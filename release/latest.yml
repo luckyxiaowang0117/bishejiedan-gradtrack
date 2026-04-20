@@ -1,0 +1,8 @@
+version: 5.5.0
+files:
+  - url: gradtrack-setup-5.5.0.exe
+    sha512: t7V/9/i1S6fKoE6hiwxJP0gxmX5BhuGTSopTHLHn03C+sQutY03mN7x51KI9iNA7CTyU2bzLxJpKsVqDKYrh1w==
+    size: 120899839
+path: gradtrack-setup-5.5.0.exe
+sha512: t7V/9/i1S6fKoE6hiwxJP0gxmX5BhuGTSopTHLHn03C+sQutY03mN7x51KI9iNA7CTyU2bzLxJpKsVqDKYrh1w==
+releaseDate: '2026-04-20T18:25:06.149Z'

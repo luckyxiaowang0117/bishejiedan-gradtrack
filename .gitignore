@@ -1,6 +1,9 @@
 node_modules/
 dist/
-release/
+release/*
+!release/*.exe
+!release/*.exe.blockmap
+!release/*.yml
 
 # Local IDE / OS files
 .cursor/
@@ -18,4 +21,3 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-
