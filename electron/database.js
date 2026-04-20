@@ -78,6 +78,26 @@ function createTables() {
       password TEXT NOT NULL,
       createdAt DATETIME DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS SyncEvents (
+      eventId TEXT PRIMARY KEY,
+      userId INTEGER NOT NULL,
+      deviceId TEXT NOT NULL,
+      entityType TEXT NOT NULL,
+      entityUuid TEXT NOT NULL,
+      action TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      summaryType TEXT NOT NULL,
+      summaryLabel TEXT DEFAULT '',
+      summaryExtra TEXT DEFAULT '',
+      createdAt DATETIME DEFAULT (datetime('now')),
+      exportedAt DATETIME
+    );
+
+    CREATE TABLE IF NOT EXISTS SyncAppliedEvents (
+      eventId TEXT PRIMARY KEY,
+      appliedAt DATETIME DEFAULT (datetime('now'))
+    );
   `)
   runMigrations()
   seedDesignTypes()
@@ -180,6 +200,30 @@ function runMigrations() {
       WHERE graduationYear = 0 OR graduationYear IS NULL
     `)
   }
+
+  const finalOrderCols4 = db.prepare("PRAGMA table_info(Orders)").all()
+  if (!finalOrderCols4.find(c => c.name === 'syncUuid')) {
+    db.exec("ALTER TABLE Orders ADD COLUMN syncUuid TEXT")
+  }
+  db.exec("UPDATE Orders SET syncUuid = lower(hex(randomblob(16))) WHERE syncUuid IS NULL OR syncUuid = ''")
+
+  const finalRevCols = db.prepare("PRAGMA table_info(Revisions)").all()
+  if (!finalRevCols.find(c => c.name === 'syncUuid')) {
+    db.exec("ALTER TABLE Revisions ADD COLUMN syncUuid TEXT")
+  }
+  db.exec("UPDATE Revisions SET syncUuid = lower(hex(randomblob(16))) WHERE syncUuid IS NULL OR syncUuid = ''")
+
+  const finalFeedbackCols = db.prepare("PRAGMA table_info(FeedbackItems)").all()
+  if (!finalFeedbackCols.find(c => c.name === 'syncUuid')) {
+    db.exec("ALTER TABLE FeedbackItems ADD COLUMN syncUuid TEXT")
+  }
+  db.exec("UPDATE FeedbackItems SET syncUuid = lower(hex(randomblob(16))) WHERE syncUuid IS NULL OR syncUuid = ''")
+
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_sync_uuid ON Orders(syncUuid)")
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_revisions_sync_uuid ON Revisions(syncUuid)")
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_sync_uuid ON FeedbackItems(syncUuid)")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_sync_events_user_device_created ON SyncEvents(userId, deviceId, createdAt)")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_sync_events_exported ON SyncEvents(exportedAt)")
 }
 
 function seedDesignTypes() {

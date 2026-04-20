@@ -43,7 +43,62 @@
         </div>
       </div>
 
-      <!-- Section 3: Design Type Management -->
+      <!-- Section 3: Syncthing Sync -->
+      <div class="settings-section sync-section">
+        <div class="section-header">
+          <el-icon :size="18" color="#0f766e"><RefreshRight /></el-icon>
+          <div>
+            <div class="section-title">一键同步（Syncthing）</div>
+            <div class="section-desc">先等 Syncthing 完成目录同步，再点击这里将交换目录中的变更与本机数据库对账合并</div>
+          </div>
+        </div>
+
+        <div class="dir-row">
+          <el-input :model-value="syncDir" readonly placeholder="未设置同步目录" />
+          <el-button type="primary" plain @click="handleSelectSyncDir">
+            <el-icon><FolderOpened /></el-icon> 选择目录
+          </el-button>
+        </div>
+
+        <div class="sync-meta-grid">
+          <div class="sync-meta-card">
+            <div class="sync-meta-label">上次同步时间</div>
+            <div class="sync-meta-value">{{ formattedLastSyncAt }}</div>
+          </div>
+          <div class="sync-meta-card">
+            <div class="sync-meta-label">同步状态</div>
+            <div class="sync-meta-value">{{ syncOverview.status || '未设置' }}</div>
+          </div>
+        </div>
+
+        <el-alert
+          :title="syncOverview.hint || '请先选择同步目录。'"
+          :type="syncDir ? 'info' : 'warning'"
+          show-icon
+          :closable="false"
+          class="settings-alert"
+        />
+
+        <div class="sync-summary">
+          <div class="sync-summary-title">同步状态说明</div>
+          <div class="sync-summary-text">{{ syncOverview.summary?.text || '自上次同步后，本机暂无重要新增记录' }}</div>
+          <div v-if="(syncOverview.summary?.details || []).length > 0" class="sync-summary-list">
+            <div v-for="detail in syncOverview.summary.details" :key="detail.title" class="sync-summary-item">
+              <span class="sync-summary-item-title">{{ detail.title }} {{ detail.count }} 条</span>
+              <span class="sync-summary-item-body">：{{ detail.items.join('、') }}<template v-if="detail.count > detail.items.length"> 等</template></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="migration-actions">
+          <el-button type="success" :loading="syncBusy" @click="handleRunSync">
+            <el-icon><RefreshRight /></el-icon> 立即同步
+          </el-button>
+          <el-button plain :disabled="syncBusy" @click="loadSyncOverview">刷新状态</el-button>
+        </div>
+      </div>
+
+      <!-- Section 4: Design Type Management -->
       <div class="settings-section">
         <div class="section-header">
           <el-icon :size="18" color="#8b5cf6"><SetUp /></el-icon>
@@ -94,7 +149,7 @@
           <el-icon><Plus /></el-icon> 添加设计类型
         </el-button>
       </div>
-      <!-- Section 4: Change Password -->
+      <!-- Section 5: Change Password -->
       <div class="settings-section">
         <div class="section-header">
           <el-icon :size="18" color="#f59e0b"><Lock /></el-icon>
@@ -120,7 +175,7 @@
         </el-form>
       </div>
 
-      <!-- Section 5: Data Migration -->
+      <!-- Section 6: Data Migration -->
       <div class="settings-section migration-section">
         <div class="section-header">
           <el-icon :size="18" color="#2563eb"><UploadFilled /></el-icon>
@@ -142,7 +197,7 @@
         </div>
       </div>
 
-      <!-- Section 6: Reset Data -->
+      <!-- Section 7: Reset Data -->
       <div class="settings-section reset-section">
         <div class="section-header">
           <el-icon :size="18" color="#e11d48"><WarnTriangleFilled /></el-icon>
@@ -200,7 +255,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const props = defineProps({ visible: Boolean, currentUser: Object })
@@ -208,14 +263,31 @@ const emit = defineEmits(['update:visible', 'reset', 'imported'])
 
 const api = window.electronAPI
 const rootDir = ref('')
+const syncDir = ref('')
 const autoLaunch = ref(false)
 const designTypes = ref([])
 const migrationBusy = ref(false)
+const syncBusy = ref(false)
 const missingFolderDialogVisible = ref(false)
 const missingOrderFolders = ref([])
+const syncOverview = ref({
+  status: '未设置同步目录',
+  lastSyncAt: '',
+  summary: { totalCount: 0, details: [], text: '自上次同步后，本机暂无重要新增记录' },
+  hint: '',
+})
 
 const pwdForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const pwdLoading = ref(false)
+
+const formattedLastSyncAt = computed(() => {
+  const value = syncOverview.value?.lastSyncAt
+  if (!value) return '尚未同步'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const pad = (num) => String(num).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+})
 
 function resetPwdForm() {
   pwdForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
@@ -255,7 +327,8 @@ async function handleChangePassword() {
 
 async function loadData() {
   const val = await api.getSetting('rootDirectory')
-  if (val) rootDir.value = val
+  rootDir.value = val || ''
+  syncDir.value = await api.getSetting('syncDirectory') || ''
   autoLaunch.value = await api.getAutoLaunch()
   const rows = await api.listDesignTypes()
   designTypes.value = rows.map(r => ({
@@ -264,6 +337,7 @@ async function loadData() {
     statuses: JSON.parse(r.statuses || '[]'),
     _adding: false, _newVal: '',
   }))
+  await loadSyncOverview()
 }
 
 watch(() => props.visible, (val) => {
@@ -348,6 +422,49 @@ async function handleSelectDir() {
   if (dir) {
     rootDir.value = dir
     await api.setSetting('rootDirectory', dir)
+  }
+}
+
+async function loadSyncOverview() {
+  if (!props.currentUser?.id) return
+  syncOverview.value = await api.getSyncOverview(props.currentUser.id)
+  syncDir.value = syncOverview.value?.syncDirectory || syncDir.value || ''
+}
+
+async function handleSelectSyncDir() {
+  const dir = await api.selectDirectory()
+  if (!dir) return
+  syncDir.value = dir
+  await api.setSetting('syncDirectory', dir)
+  await loadSyncOverview()
+  ElMessage.success('同步目录已更新')
+}
+
+async function handleRunSync() {
+  if (!props.currentUser?.id) {
+    ElMessage.error('未获取到当前用户，请重新登录后重试')
+    return
+  }
+  if (!syncDir.value) {
+    ElMessage.warning('请先设置同步目录')
+    return
+  }
+  syncBusy.value = true
+  try {
+    const result = await api.runSync(props.currentUser.id)
+    if (!result?.success) {
+      const errorTextMap = {
+        INVALID_USER: '当前用户无效，请重新登录',
+        SYNC_DIR_NOT_SET: '请先设置同步目录',
+      }
+      ElMessage.error(errorTextMap[result?.error] || result?.error || '同步失败')
+      return
+    }
+    syncOverview.value = result.overview || syncOverview.value
+    syncDir.value = syncOverview.value?.syncDirectory || syncDir.value
+    ElMessage.success(`同步完成：导入 ${result.imported} 条，导出 ${result.exported} 条`)
+  } finally {
+    syncBusy.value = false
   }
 }
 
@@ -568,6 +685,80 @@ function convertToSubTypes(dt) {
   margin-top: 4px;
 }
 
+.sync-section {
+  border: 1px solid #c7f9e5;
+  border-radius: 12px;
+  padding: 14px;
+  background: linear-gradient(180deg, #f5fffb 0%, #f8fffd 100%);
+}
+
+.sync-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sync-meta-card {
+  border: 1px solid #d1fae5;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.sync-meta-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.sync-meta-value {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f766e;
+}
+
+.sync-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.sync-summary-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.sync-summary-text {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #475569;
+}
+
+.sync-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sync-summary-item {
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.sync-summary-item-title {
+  font-weight: 600;
+}
+
+.sync-summary-item-body {
+  color: #64748b;
+}
+
 /* Auto launch */
 .auto-launch-row {
   display: flex;
@@ -724,5 +915,11 @@ function convertToSubTypes(dt) {
 
 .dt-tag-input {
   width: 80px;
+}
+
+@media (max-width: 680px) {
+  .sync-meta-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

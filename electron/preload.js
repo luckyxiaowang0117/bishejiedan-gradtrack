@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
   selectDirectory: () => ipcRenderer.invoke('settings:selectDirectory'),
+  getSyncOverview: (userId) => ipcRenderer.invoke('sync:getOverview', userId),
+  runSync: (userId) => ipcRenderer.invoke('sync:run', userId),
 
   // Reset
   resetAll: (superPassword) => ipcRenderer.invoke('reset:all', superPassword),
@@ -37,7 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Orders
   getGraduationYears: (userId) => ipcRenderer.invoke('orders:graduationYears', userId),
-  listOrders: (userId, search, orderType, graduationYear) => ipcRenderer.invoke('orders:list', userId, search, orderType, graduationYear),
+  listOrders: (userId, search, orderType, graduationYear, sortMode) => ipcRenderer.invoke('orders:list', userId, search, orderType, graduationYear, sortMode),
   getOrder: (userId, id) => ipcRenderer.invoke('orders:get', userId, id),
   getDistinctValues: (userId, field) => ipcRenderer.invoke('orders:distinctValues', userId, field),
   createOrder: (data) => ipcRenderer.invoke('orders:create', data),

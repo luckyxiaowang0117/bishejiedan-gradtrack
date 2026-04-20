@@ -1,9 +1,7 @@
 <template>
   <aside class="sidebar">
-    <!-- Title bar drag region -->
     <div class="drag-region" :class="{ 'drag-region-win': isWindows }" />
 
-    <!-- Header: brand + search -->
     <div class="sidebar-head">
       <div class="brand-row">
         <div class="brand-icon">
@@ -24,9 +22,7 @@
       />
     </div>
 
-    <!-- Filter panel -->
     <div class="filter-panel">
-      <!-- Row 0: Graduation year segmented control -->
       <div class="grad-seg">
         <button
           v-for="y in graduationYears"
@@ -42,7 +38,6 @@
         >全部届</button>
       </div>
 
-      <!-- Row 1: Type segmented control -->
       <div class="type-seg">
         <button
           v-for="t in typeFilters"
@@ -53,7 +48,6 @@
         >{{ t.label }}</button>
       </div>
 
-      <!-- Row 2: Cascading + status combined -->
       <div class="filter-body">
         <button
           class="advanced-toggle"
@@ -152,6 +146,7 @@
             </div>
           </div>
         </div>
+
         <div class="status-row">
           <button
             v-for="f in filters"
@@ -168,8 +163,40 @@
             >{{ badgeCounts[f.countKey] }}</span>
           </button>
         </div>
-        <div v-if="hasActiveFilters" class="reset-row">
+
+        <div class="list-organizer">
+          <div class="organizer-field">
+            <span class="organizer-label">排序</span>
+            <el-select
+              :model-value="sortMode"
+              @update:model-value="$emit('sort-change', $event)"
+              size="small"
+              class="organizer-select"
+            >
+              <el-option v-for="item in sortOptions" :key="item.key" :label="item.label" :value="item.key" />
+            </el-select>
+          </div>
+
+          <div class="organizer-field">
+            <span class="organizer-label">分组</span>
+            <el-select
+              :model-value="groupMode"
+              @update:model-value="$emit('group-change', $event)"
+              size="small"
+              class="organizer-select"
+            >
+              <el-option v-for="item in groupOptions" :key="item.key" :label="item.label" :value="item.key" />
+            </el-select>
+          </div>
+        </div>
+
+        <div class="reset-row">
+          <div class="result-meta">
+            <span class="result-count">{{ totalVisibleOrders }}</span>
+            <span class="result-label">个项目</span>
+          </div>
           <el-button
+            v-if="hasActiveFilters"
             text
             size="small"
             type="danger"
@@ -183,106 +210,130 @@
       </div>
     </div>
 
-    <!-- Order list -->
     <div class="order-list">
-      <div
-        v-for="order in orders"
-        :key="order.id"
-        class="order-card"
-        :class="[
-          { active: order.id === selectedOrderId },
-          'card-urgency-' + getStatus(order).overall,
-        ]"
-        @click="$emit('select', order.id)"
-      >
-        <div class="card-top">
-          <h3 class="card-title">{{ order.title }}</h3>
-          <span
-            class="type-badge"
-            :style="{ color: (orderTypeMap[order.orderType || 'thesis'] || {}).color, background: (orderTypeMap[order.orderType || 'thesis'] || {}).color + '14' }"
-          >{{ (orderTypeMap[order.orderType || 'thesis'] || {}).label }}</span>
-        </div>
+      <template v-if="flatOrderCount > 0">
+        <section v-for="group in orderGroups" :key="group.key" class="order-group">
+          <button
+            v-if="groupMode !== 'none'"
+            type="button"
+            class="order-group-head"
+            @click="toggleGroup(group.key)"
+          >
+            <div class="order-group-copy">
+              <div class="order-group-title">{{ group.label }}</div>
+              <div v-if="group.description" class="order-group-sub">{{ group.description }}</div>
+            </div>
+            <div class="order-group-right">
+              <div class="order-group-count">{{ group.orders.length }}</div>
+              <el-icon class="order-group-arrow" :class="{ 'order-group-arrow-open': isGroupExpanded(group.key) }">
+                <ArrowDown />
+              </el-icon>
+            </div>
+          </button>
 
-        <div v-if="order.university" class="card-school">
-          <el-icon :size="12"><OfficeBuilding /></el-icon>
-          {{ order.university }}<span v-if="order.major"> · {{ order.major }}</span>
-        </div>
-
-        <div class="card-people">
-          <span><el-icon :size="12"><User /></el-icon> 接单人: {{ order.receiver || '本人' }}</span>
-          <span><el-icon :size="12"><SetUp /></el-icon> 处理人: {{ order.handler || '本人' }}</span>
-        </div>
-
-        <div v-if="order.groupChatName" class="card-group-chat">
-          <el-icon :size="12"><ChatDotRound /></el-icon>
-          <span class="card-group-chat-label">群聊名称:</span>
-          <span class="card-group-chat-value">{{ order.groupChatName }}</span>
-        </div>
-
-        <div class="card-bottom">
-          <div class="card-badges">
-            <!-- 已交付初稿后的状态显示 -->
-            <span v-if="order.isDraftSubmitted && (order.revisionCount || 0) === 0" class="badge badge-success">
-              <el-icon :size="12"><Check /></el-icon> 已交付初稿
-            </span>
-            <span v-else-if="order.isDraftSubmitted && (order.revisionCount || 0) > 0 && (order.pendingCount || 0) > 0" class="badge badge-warning">
-              <el-icon :size="12"><Clock /></el-icon> 第{{ order.revisionCount }}次修改中
-            </span>
-            <span v-else-if="order.isDraftSubmitted && (order.revisionCount || 0) > 0 && (order.pendingCount || 0) === 0" class="badge badge-success">
-              <el-icon :size="12"><Check /></el-icon> 已完成{{ order.revisionCount }}次修改
-            </span>
-            <!-- 未交付初稿时的交稿状态显示 -->
-            <span v-else-if="getStatus(order).deliveryStatus === 'danger'" class="badge badge-danger">
-              <el-icon :size="12"><WarningFilled /></el-icon> 交稿逾期
-            </span>
-            <span v-else-if="getStatus(order).deliveryStatus === 'warning'" class="badge badge-deadline-warn">
-              <el-icon :size="12"><WarningFilled /></el-icon> 交稿临近
-            </span>
-            <!-- 修改意见的逾期/临近状态 -->
-            <span v-if="getStatus(order).revisionStatus === 'danger'" class="badge badge-danger">
-              <el-icon :size="12"><Clock /></el-icon> 修改逾期
-            </span>
-            <span v-else-if="getStatus(order).revisionStatus === 'warning'" class="badge badge-deadline-warn">
-              <el-icon :size="12"><Clock /></el-icon> 修改临近
-            </span>
-            <!-- 待修改项（仅在未交付初稿且无其他状态时显示） -->
-            <span
-              v-if="!order.isDraftSubmitted && order.pendingCount > 0 && getStatus(order).deliveryStatus === 'normal' && getStatus(order).revisionStatus === 'normal'"
-              class="badge"
-              :class="order.overdueCount > 0 ? 'badge-danger' : 'badge-warning'"
+          <div v-show="groupMode === 'none' || isGroupExpanded(group.key)">
+            <div
+              v-for="order in group.orders"
+              :key="order.id"
+              class="order-card"
+              :class="[
+                { active: order.id === selectedOrderId },
+                'card-urgency-' + getStatus(order).overall,
+              ]"
+              @click="$emit('select', order.id)"
             >
-              <el-icon :size="12"><WarningFilled /></el-icon>
-              {{ order.pendingCount }} 待改
-            </span>
-            <span v-if="order.totalAmount > order.paidAmount" class="badge badge-unpaid">
-              <el-icon :size="12"><Money /></el-icon> 尾款未结清
-            </span>
-            <span v-if="(order.dispatchAmount || 0) > 0 && (order.handlerPaidAmount || 0) >= order.dispatchAmount" class="badge badge-handler-paid">
-              <el-icon :size="12"><Check /></el-icon> 已结清{{ order.handler ? ' ' + order.handler : '' }}
-            </span>
-            <span v-else-if="(order.dispatchAmount || 0) > 0 && (order.handlerPaidAmount || 0) < order.dispatchAmount" class="badge badge-handler-unpaid">
-              <el-icon :size="12"><Money /></el-icon> 待付{{ order.handler ? ' ' + order.handler : '' }} ¥{{ (order.dispatchAmount - (order.handlerPaidAmount || 0)).toFixed(0) }}
-            </span>
-            <span v-if="(order.refundAmount || 0) > 0" class="badge badge-refund">
-              <el-icon :size="12"><RefreshLeft /></el-icon> 已退¥{{ order.refundAmount }}
-            </span>
-          </div>
-        </div>
-      </div>
+              <div class="card-top">
+                <h3 class="card-title">{{ order.title }}</h3>
+                <span
+                  class="type-badge"
+                  :style="{ color: (orderTypeMap[order.orderType || 'thesis'] || {}).color, background: (orderTypeMap[order.orderType || 'thesis'] || {}).color + '14' }"
+                >{{ (orderTypeMap[order.orderType || 'thesis'] || {}).label }}</span>
+              </div>
 
-      <div v-if="orders.length === 0" class="empty-list">
+              <div v-if="order.university" class="card-school">
+                <el-icon :size="12"><OfficeBuilding /></el-icon>
+                {{ order.university }}<span v-if="order.major"> · {{ order.major }}</span>
+              </div>
+
+              <div class="card-people">
+                <span><el-icon :size="12"><User /></el-icon> 接单人: {{ order.receiver || '本人' }}</span>
+                <span><el-icon :size="12"><SetUp /></el-icon> 处理人: {{ order.handler || '本人' }}</span>
+              </div>
+
+              <div v-if="order.groupChatName" class="card-group-chat">
+                <el-icon :size="12"><ChatDotRound /></el-icon>
+                <span class="card-group-chat-label">群聊名称:</span>
+                <span class="card-group-chat-value">{{ order.groupChatName }}</span>
+              </div>
+
+              <div class="card-bottom">
+                <div class="card-badges">
+                  <span v-if="order.isDraftSubmitted && (order.revisionCount || 0) === 0" class="badge badge-success">
+                    <el-icon :size="12"><Check /></el-icon> 已交付初稿
+                  </span>
+                  <span v-else-if="order.isDraftSubmitted && (order.revisionCount || 0) > 0 && (order.pendingCount || 0) > 0" class="badge badge-warning">
+                    <el-icon :size="12"><Clock /></el-icon> 第{{ order.revisionCount }}次修改中
+                  </span>
+                  <span v-else-if="order.isDraftSubmitted && (order.revisionCount || 0) > 0 && (order.pendingCount || 0) === 0" class="badge badge-success">
+                    <el-icon :size="12"><Check /></el-icon> 已完成{{ order.revisionCount }}次修改
+                  </span>
+                  <span v-else-if="getStatus(order).deliveryStatus === 'danger'" class="badge badge-danger">
+                    <el-icon :size="12"><WarningFilled /></el-icon> 交稿逾期
+                  </span>
+                  <span v-else-if="getStatus(order).deliveryStatus === 'warning'" class="badge badge-deadline-warn">
+                    <el-icon :size="12"><WarningFilled /></el-icon> 交稿临近
+                  </span>
+                  <span v-if="getStatus(order).revisionStatus === 'danger'" class="badge badge-danger">
+                    <el-icon :size="12"><Clock /></el-icon> 修改逾期
+                  </span>
+                  <span v-else-if="getStatus(order).revisionStatus === 'warning'" class="badge badge-deadline-warn">
+                    <el-icon :size="12"><Clock /></el-icon> 修改临近
+                  </span>
+                  <span
+                    v-if="!order.isDraftSubmitted && order.pendingCount > 0 && getStatus(order).deliveryStatus === 'normal' && getStatus(order).revisionStatus === 'normal'"
+                    class="badge"
+                    :class="order.overdueCount > 0 ? 'badge-danger' : 'badge-warning'"
+                  >
+                    <el-icon :size="12"><WarningFilled /></el-icon>
+                    {{ order.pendingCount }} 待改
+                  </span>
+                  <span v-if="order.totalAmount > order.paidAmount" class="badge badge-unpaid">
+                    <el-icon :size="12"><Money /></el-icon> 尾款未结清
+                  </span>
+                  <span v-if="(order.dispatchAmount || 0) > 0 && (order.handlerPaidAmount || 0) >= order.dispatchAmount" class="badge badge-handler-paid">
+                    <el-icon :size="12"><Check /></el-icon> 已结清{{ order.handler ? ' ' + order.handler : '' }}
+                  </span>
+                  <span v-else-if="(order.dispatchAmount || 0) > 0 && (order.handlerPaidAmount || 0) < order.dispatchAmount" class="badge badge-handler-unpaid">
+                    <el-icon :size="12"><Money /></el-icon> 待付{{ order.handler ? ' ' + order.handler : '' }} ¥{{ (order.dispatchAmount - (order.handlerPaidAmount || 0)).toFixed(0) }}
+                  </span>
+                  <span v-if="(order.refundAmount || 0) > 0" class="badge badge-refund">
+                    <el-icon :size="12"><RefreshLeft /></el-icon> 已退¥{{ order.refundAmount }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </template>
+
+      <div v-else class="empty-list">
         <el-icon :size="36" color="#cbd5e1"><Filter /></el-icon>
         <p>没有找到相关单子</p>
+        <span class="empty-list-sub">可以尝试切换排序、分组或筛选条件</span>
       </div>
     </div>
 
-    <!-- Footer -->
     <div class="sidebar-foot">
       <div class="foot-row">
         <el-button type="primary" size="large" class="create-btn" @click="$emit('create')">
           <el-icon><CirclePlusFilled /></el-icon>
           新建接单项目
         </el-button>
+        <el-tooltip content="立即同步" placement="top">
+          <el-button size="large" class="settings-btn sync-btn" :loading="syncBusy" @click="$emit('open-sync')">
+            <el-icon :size="18"><RefreshRight /></el-icon>
+          </el-button>
+        </el-tooltip>
         <el-tooltip content="数据统计" placement="top">
           <el-button size="large" class="settings-btn" @click="$emit('open-stats')">
             <el-icon :size="18"><DataLine /></el-icon>
@@ -304,11 +355,14 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   appVersion: String,
-  orders: Array,
+  orderGroups: {
+    type: Array,
+    default: () => [],
+  },
   selectedOrderId: Number,
   filter: String,
   search: String,
@@ -324,16 +378,66 @@ const props = defineProps({
   handlerFilter: String,
   handlers: Array,
   badgeCounts: Object,
+  sortMode: String,
+  groupMode: String,
+  syncBusy: Boolean,
+  sortOptions: {
+    type: Array,
+    default: () => [],
+  },
+  groupOptions: {
+    type: Array,
+    default: () => [],
+  },
+  totalVisibleOrders: Number,
   isWindows: Boolean,
 })
-defineEmits(['select', 'filter-change', 'search-change', 'type-change', 'graduation-year-change', 'university-change', 'major-change', 'receiver-change', 'handler-change', 'reset-filters', 'create', 'open-settings', 'open-stats', 'logout'])
+
+defineEmits([
+  'select',
+  'filter-change',
+  'search-change',
+  'type-change',
+  'graduation-year-change',
+  'university-change',
+  'major-change',
+  'receiver-change',
+  'handler-change',
+  'sort-change',
+  'group-change',
+  'reset-filters',
+  'create',
+  'open-sync',
+  'open-settings',
+  'open-stats',
+  'logout',
+])
 
 function getCurrentGraduationYear() {
   const now = new Date()
   return now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear()
 }
+
 const currentGradYear = getCurrentGraduationYear()
 const showAdvancedFilters = ref(false)
+const expandedGroupKeys = ref([])
+
+watch(() => props.groupMode, (mode) => {
+  if (mode === 'none') {
+    expandedGroupKeys.value = []
+  } else {
+    expandedGroupKeys.value = []
+  }
+}, { immediate: true })
+
+watch(() => props.orderGroups, (groups) => {
+  const validKeys = new Set(groups.map(group => group.key))
+  expandedGroupKeys.value = expandedGroupKeys.value.filter(key => validKeys.has(key))
+}, { deep: true })
+
+const flatOrderCount = computed(() =>
+  props.orderGroups.reduce((sum, group) => sum + group.orders.length, 0)
+)
 
 const hasActiveFilters = computed(() =>
   props.typeFilter !== 'all' ||
@@ -373,9 +477,20 @@ const orderTypeMap = {
   translation: { label: '外文翻译', color: '#f59e0b' },
 }
 
+function isGroupExpanded(key) {
+  return expandedGroupKeys.value.includes(key)
+}
+
+function toggleGroup(key) {
+  if (isGroupExpanded(key)) {
+    expandedGroupKeys.value = expandedGroupKeys.value.filter(item => item !== key)
+  } else {
+    expandedGroupKeys.value = [...expandedGroupKeys.value, key]
+  }
+}
+
 function getStatus(order) {
   let deliveryStatus = 'normal'
-  // 如果已交付初稿，不再根据 deadline 计算逾期/临近状态
   if (order.isDraftSubmitted) {
     deliveryStatus = 'delivered'
   } else if (order.deadline) {
@@ -414,8 +529,8 @@ function getStatus(order) {
 <style scoped>
 .sidebar {
   width: fit-content;
-  min-width: 380px;
-  max-width: 520px;
+  min-width: 410px;
+  max-width: 560px;
   background: #fff;
   border-right: 1px solid #e2e8f0;
   display: flex;
@@ -432,6 +547,7 @@ function getStatus(order) {
   flex-shrink: 0;
   -webkit-app-region: drag;
 }
+
 .drag-region-win {
   height: 8px;
 }
@@ -491,12 +607,12 @@ function getStatus(order) {
   border: 1px solid #e2e8f0;
   background: #f8fafc;
 }
+
 .search-input :deep(.el-input__wrapper.is-focus) {
   border-color: #6366f1;
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
 }
 
-/* ─── Filter Panel ─── */
 .filter-panel {
   padding: 0;
   display: flex;
@@ -505,7 +621,6 @@ function getStatus(order) {
   flex-shrink: 0;
 }
 
-/* Graduation year segmented control */
 .grad-seg {
   display: flex;
   padding: 10px 16px 0;
@@ -513,6 +628,7 @@ function getStatus(order) {
   background: #f8fafc;
   flex-wrap: wrap;
 }
+
 .grad-seg-btn {
   padding: 5px 12px;
   font-size: 12px;
@@ -528,21 +644,25 @@ function getStatus(order) {
   gap: 4px;
   white-space: nowrap;
 }
+
 .grad-seg-btn:hover {
   color: #4f46e5;
   border-color: #c7d2fe;
   background: #eef2ff;
 }
+
 .grad-seg-active {
   background: #4f46e5;
   color: #fff;
   border-color: #4f46e5;
 }
+
 .grad-seg-active:hover {
   background: #4338ca;
   color: #fff;
   border-color: #4338ca;
 }
+
 .grad-current-tag {
   font-size: 10px;
   background: rgba(255,255,255,0.25);
@@ -550,17 +670,18 @@ function getStatus(order) {
   border-radius: 4px;
   line-height: 1.4;
 }
+
 .grad-seg-active .grad-current-tag {
   background: rgba(255,255,255,0.3);
 }
 
-/* Segmented type control */
 .type-seg {
   display: flex;
   padding: 10px 16px;
   gap: 2px;
   background: #f8fafc;
 }
+
 .type-seg-btn {
   flex: 1;
   padding: 6px 0;
@@ -574,27 +695,30 @@ function getStatus(order) {
   transition: all 0.15s;
   text-align: center;
 }
+
 .type-seg-btn:hover {
   color: #64748b;
   background: #e2e8f0;
 }
+
 .type-seg-active {
   background: #fff;
   color: #1e293b;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
+
 .type-seg-active:hover {
   background: #fff;
   color: #1e293b;
 }
 
-/* Cascade + status body */
 .filter-body {
-  padding: 8px 16px;
+  padding: 10px 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
+
 .advanced-toggle {
   width: 100%;
   display: flex;
@@ -607,34 +731,35 @@ function getStatus(order) {
   background: linear-gradient(180deg, #ffffff, #f8fafc);
   color: #475569;
   cursor: pointer;
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
+
 .advanced-toggle:hover {
   border-color: #cbd5e1;
   background: linear-gradient(180deg, #ffffff, #f1f5f9);
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
   transform: translateY(-1px);
 }
+
 .advanced-toggle-active {
   border-color: #c7d2fe;
   background: linear-gradient(180deg, #f8faff, #eef2ff);
   box-shadow: 0 10px 20px rgba(99, 102, 241, 0.08);
 }
+
 .advanced-toggle-left,
 .advanced-toggle-right {
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
+
 .advanced-toggle-text {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
+
 .advanced-toggle-badge {
   font-size: 10px;
   font-weight: 700;
@@ -644,19 +769,19 @@ function getStatus(order) {
   border-radius: 999px;
   line-height: 1;
 }
+
 .advanced-toggle-arrow {
   color: #64748b;
 }
+
 .cascade-shell {
   padding: 8px 10px 9px;
   border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.96));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.96));
   border: 1px solid #e2e8f0;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    0 10px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 10px 24px rgba(15, 23, 42, 0.04);
 }
+
 .cascade-shell-head {
   display: flex;
   align-items: baseline;
@@ -664,6 +789,7 @@ function getStatus(order) {
   gap: 12px;
   margin-bottom: 6px;
 }
+
 .cascade-shell-title {
   font-size: 11px;
   font-weight: 700;
@@ -671,47 +797,35 @@ function getStatus(order) {
   color: #334155;
   line-height: 1.2;
 }
+
 .cascade-shell-sub {
   font-size: 9px;
   color: #94a3b8;
   white-space: nowrap;
   line-height: 1.2;
 }
+
 .cascade-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
+
 .filter-field {
   position: relative;
   padding: 7px 8px 8px;
   border-radius: 12px;
   border: 1px solid transparent;
   background: #fff;
-  transition:
-    transform 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    background 0.18s ease;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
-.filter-field::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.18s ease;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(255, 255, 255, 0));
-}
+
 .filter-field:hover {
   transform: translateY(-1px);
   border-color: #dbe4ff;
   box-shadow: 0 10px 18px rgba(99, 102, 241, 0.08);
 }
-.filter-field:hover::after {
-  opacity: 1;
-}
+
 .filter-field-label {
   display: inline-flex;
   align-items: center;
@@ -722,72 +836,32 @@ function getStatus(order) {
   letter-spacing: 0.02em;
   line-height: 1.1;
 }
-.filter-field-university .filter-field-label {
-  color: #4f46e5;
-}
-.filter-field-major .filter-field-label {
-  color: #0f766e;
-}
-.filter-field-receiver .filter-field-label {
-  color: #c2410c;
-}
-.filter-field-handler .filter-field-label {
-  color: #7c3aed;
-}
-.cascade-select {
-  flex: 1;
-  min-width: 0;
-}
-.cascade-select :deep(.el-select__wrapper) {
+
+.filter-field-university .filter-field-label { color: #4f46e5; }
+.filter-field-major .filter-field-label { color: #0f766e; }
+.filter-field-receiver .filter-field-label { color: #c2410c; }
+.filter-field-handler .filter-field-label { color: #7c3aed; }
+
+.cascade-select :deep(.el-select__wrapper),
+.organizer-select :deep(.el-select__wrapper) {
   min-height: 34px;
   border-radius: 10px;
   background: linear-gradient(180deg, #f8fafc, #f1f5f9);
   box-shadow: inset 0 0 0 1px #e2e8f0;
-  transition:
-    box-shadow 0.18s ease,
-    background 0.18s ease,
-    transform 0.18s ease;
-}
-.cascade-select :deep(.el-select__wrapper:hover) {
-  background: linear-gradient(180deg, #ffffff, #f8fafc);
-  box-shadow: inset 0 0 0 1px #cbd5e1;
-}
-.cascade-select :deep(.el-select__wrapper.is-focused) {
-  background: #ffffff;
-  box-shadow:
-    inset 0 0 0 1px #6366f1,
-    0 0 0 4px rgba(99, 102, 241, 0.12);
-}
-.cascade-select :deep(.el-select__placeholder),
-.cascade-select :deep(.el-select__selected-item) {
-  font-size: 11px;
-}
-.cascade-select :deep(.el-select__placeholder) {
-  color: #94a3b8;
-}
-.cascade-select :deep(.el-select__selected-item) {
-  color: #334155;
-}
-.cascade-select :deep(.el-select__caret),
-.cascade-select :deep(.el-select__clear) {
-  color: #94a3b8;
 }
 
-/* Status pills */
+.cascade-select :deep(.el-select__wrapper.is-focused),
+.organizer-select :deep(.el-select__wrapper.is-focused) {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #6366f1, 0 0 0 4px rgba(99, 102, 241, 0.12);
+}
+
 .status-row {
   display: flex;
   flex-wrap: nowrap;
   gap: 5px;
 }
-.reset-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 2px;
-}
-.reset-filters-btn {
-  padding: 0 4px;
-  font-size: 11px;
-}
+
 .filter-pill {
   padding: 4px 10px;
   border-radius: 20px;
@@ -802,60 +876,78 @@ function getStatus(order) {
   align-items: center;
   gap: 5px;
 }
-/* 默认未选中 - 各状态带浅色底 */
+
 .pill-default {
   background: #f1f5f9;
   color: #64748b;
   border-color: #e2e8f0;
 }
+
 .pill-default:hover {
   background: #e2e8f0;
   color: #475569;
 }
+
 .pill-key-all.pill-default {
   background: #f0f0ff;
   color: #6366f1;
   border-color: #e0e7ff;
 }
+
 .pill-key-draft.pill-default {
   background: #faf5ff;
   color: #9333ea;
   border-color: #ede9fe;
 }
+
 .pill-key-todo.pill-default {
   background: #fffbeb;
   color: #d97706;
   border-color: #fef3c7;
 }
+
 .pill-key-unpaid.pill-default {
   background: #fff5f5;
   color: #e11d48;
   border-color: #ffe4e6;
 }
 
-/* 选中态 - 颜色加重 */
 .pill-all {
   background: #e0e7ff;
   color: #3730a3;
   border-color: #a5b4fc;
 }
+
 .pill-draft {
   background: #ede9fe;
   color: #6b21a8;
   border-color: #c4b5fd;
 }
+
 .pill-todo {
   background: #fef3c7;
   color: #92400e;
   border-color: #fcd34d;
 }
+
 .pill-unpaid {
   background: #ffe4e6;
   color: #9f1239;
   border-color: #fda4af;
 }
 
-/* Badge counts */
+.pill-idle {
+  background: linear-gradient(135deg, #e0e7ff, #ede9fe, #fce7f3);
+  color: #6d28d9;
+  border-color: #c4b5fd;
+}
+
+.pill-key-idle.pill-default {
+  background: linear-gradient(135deg, #eef2ff, #f5f3ff, #fdf2f8);
+  color: #7c3aed;
+  border-color: #ddd6fe;
+}
+
 .pill-count {
   display: inline-flex;
   align-items: center;
@@ -870,16 +962,131 @@ function getStatus(order) {
   background: rgba(0,0,0,0.12);
   color: inherit;
 }
-.pill-count-active {
-  background: rgba(0,0,0,0.15);
-  color: inherit;
+
+.list-organizer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-/* ─── Order Cards ─── */
+.organizer-field {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 8px;
+  background: #fff;
+}
+
+.organizer-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.03em;
+}
+
+.reset-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.result-meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: #64748b;
+}
+
+.result-count {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.result-label {
+  font-size: 11px;
+}
+
+.reset-filters-btn {
+  padding: 0 4px;
+  font-size: 11px;
+}
+
 .order-list {
   flex: 1;
   overflow-y: auto;
   padding: 12px;
+}
+
+.order-group + .order-group {
+  margin-top: 12px;
+}
+
+.order-group {
+  position: relative;
+}
+
+.order-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 6px;
+  width: 100%;
+  border: none;
+  background: rgba(248, 250, 252, 0.96);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  text-align: left;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  border-radius: 10px;
+  box-shadow: 0 6px 14px rgba(148, 163, 184, 0.08);
+  margin-bottom: 8px;
+}
+
+.order-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.order-group-sub {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.order-group-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.order-group-count {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.order-group-arrow {
+  color: #94a3b8;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.order-group-arrow-open {
+  transform: rotate(180deg);
+  color: #4f46e5;
 }
 
 .order-card {
@@ -891,10 +1098,12 @@ function getStatus(order) {
   background: #fff;
   margin-bottom: 8px;
 }
+
 .order-card:hover {
   border-color: #cbd5e1;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
+
 .order-card.active {
   background: #eef2ff;
   border-color: #c7d2fe;
@@ -921,13 +1130,11 @@ function getStatus(order) {
   flex: 1;
   min-width: 0;
 }
+
 .order-card.active .card-title {
   color: #312e81;
 }
-.design-tag {
-  flex-shrink: 0;
-  font-size: 10px;
-}
+
 .type-badge {
   flex-shrink: 0;
   font-size: 10px;
@@ -935,17 +1142,6 @@ function getStatus(order) {
   padding: 2px 8px;
   border-radius: 4px;
   white-space: nowrap;
-}
-
-.done-badge {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #d1fae5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .card-school {
@@ -968,6 +1164,7 @@ function getStatus(order) {
   margin-bottom: 10px;
   flex-wrap: wrap;
 }
+
 .card-people span {
   display: flex;
   align-items: center;
@@ -1005,6 +1202,7 @@ function getStatus(order) {
 .card-badges {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .badge {
@@ -1016,84 +1214,61 @@ function getStatus(order) {
   font-size: 11px;
   font-weight: 500;
 }
-.badge-warning {
-  background: #fffbeb;
-  color: #d97706;
-}
-.badge-success {
-  background: #ecfdf5;
-  color: #059669;
-}
-.badge-danger {
-  background: #fff1f2;
-  color: #be123c;
-}
-.badge-unpaid {
-  background: #fff1f2;
-  color: #e11d48;
-}
-.badge-handler-paid {
-  background: #ecfdf5;
-  color: #059669;
-}
-.badge-handler-unpaid {
-  background: #fef3c7;
-  color: #b45309;
-}
+
+.badge-warning,
+.badge-deadline-warn,
 .badge-refund {
   background: #fffbeb;
   color: #d97706;
 }
 
-/* Card urgency states */
+.badge-success,
+.badge-handler-paid {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.badge-danger,
+.badge-unpaid {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.badge-handler-unpaid {
+  background: #fef3c7;
+  color: #b45309;
+}
+
 .order-card.card-urgency-warning {
   border-left: 3px solid #f59e0b;
 }
+
 .order-card.card-urgency-danger {
   border-left: 3px solid #e11d48;
   background: #fef2f2;
 }
+
 .order-card.card-urgency-danger.active {
   background: #fef2f2;
   border-color: #e11d48;
   border-left: 3px solid #e11d48;
 }
+
 .order-card.card-urgency-warning.active {
   border-left: 3px solid #f59e0b;
 }
 
-.badge-deadline-warn {
-  background: #fffbeb;
-  color: #d97706;
-}
-
-.pill-idle {
-  background: linear-gradient(135deg, #e0e7ff, #ede9fe, #fce7f3);
-  color: #6d28d9;
-  border-color: #c4b5fd;
-}
-.pill-idle .pill-count {
-  background: rgba(109,40,217,0.2);
-  color: #6d28d9;
-}
-
-/* idle pill 非选中状态 */
-.pill-key-idle.pill-default {
-  background: linear-gradient(135deg, #eef2ff, #f5f3ff, #fdf2f8);
-  color: #7c3aed;
-  border-color: #ddd6fe;
-}
-.pill-key-idle.pill-default .pill-count {
-  background: rgba(124,58,237,0.15);
-  color: #7c3aed;
-}
-
-/* ─── Empty + Footer ─── */
 .empty-list {
   text-align: center;
   padding: 60px 0;
   color: #94a3b8;
   font-size: 13px;
+}
+
+.empty-list-sub {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
 }
 
 .sidebar-foot {
@@ -1119,11 +1294,19 @@ function getStatus(order) {
   color: #64748b !important;
   border-color: #e2e8f0 !important;
 }
+
 .settings-btn:hover {
   color: #4f46e5 !important;
   border-color: #c7d2fe !important;
   background: #eef2ff !important;
 }
+
+.sync-btn:hover {
+  color: #0f766e !important;
+  border-color: #99f6e4 !important;
+  background: #ecfdf5 !important;
+}
+
 .logout-btn:hover {
   color: #e11d48 !important;
   border-color: #fecdd3 !important;
