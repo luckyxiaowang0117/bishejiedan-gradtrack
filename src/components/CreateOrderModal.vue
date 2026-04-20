@@ -2,12 +2,21 @@
   <el-dialog
     v-model="dialogVisible"
     :title="isEditing ? '编辑订单信息' : '新建接单项目'"
-    width="var(--gt-dialog-order)"
+    :width="dialogWidthPx"
+    :style="dialogStyleVars"
     align-center
     :close-on-click-modal="false"
     destroy-on-close
     class="order-dialog"
   >
+    <button
+      type="button"
+      class="dialog-resizer"
+      title="拖拽调整弹窗宽度，双击恢复默认宽度"
+      @mousedown="startDialogResize"
+      @dblclick="resetDialogWidth"
+    />
+
     <el-form :model="form" label-position="top" size="default" class="order-form">
       <div class="form-layout">
         <section class="form-column form-column-left">
@@ -183,7 +192,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, onMounted, inject } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted, nextTick, inject } from 'vue'
 import { ElMessage } from 'element-plus'
 
 const props = defineProps({ visible: Boolean, order: Object })
@@ -192,10 +201,19 @@ const api = window.electronAPI
 const currentUser = inject('currentUser')
 const saving = ref(false)
 const isEditing = computed(() => !!props.order)
+const dialogWidth = ref(null)
+const dialogShiftX = ref(0)
+let removeResizeListeners = null
+let mainPanelResizeObserver = null
 const dialogVisible = computed({
   get: () => props.visible,
   set: (value) => emit('update:visible', value),
 })
+
+const dialogWidthPx = computed(() => `${resolveDialogWidth()}px`)
+const dialogStyleVars = computed(() => ({
+  '--gt-order-dialog-offset-x': `${dialogShiftX.value}px`,
+}))
 
 const orderTypes = [
   { key: 'thesis', label: '毕设论文', desc: '含论文、设计、修改', color: '#6366f1' },
@@ -238,6 +256,123 @@ const titlePlaceholder = computed(() => {
 })
 
 const historyCache = ref({})
+
+function getMainPanelRect() {
+  return document.querySelector('.main-panel')?.getBoundingClientRect() || null
+}
+
+function getDefaultDialogWidth() {
+  if (window.innerWidth <= 1680 || window.innerHeight <= 940) return 920
+  if (window.innerWidth <= 2200 || window.innerHeight <= 1180) return 1020
+  return 1120
+}
+
+function getDialogWidthBounds() {
+  const mainPanelRect = getMainPanelRect()
+  const defaultWidth = getDefaultDialogWidth()
+  if (!mainPanelRect) {
+    return { min: Math.max(760, Math.round(defaultWidth * 0.82)), max: defaultWidth }
+  }
+
+  const max = Math.max(720, Math.floor(mainPanelRect.width - 32))
+  const min = Math.min(max, Math.max(760, Math.round(defaultWidth * 0.82)))
+  return { min, max }
+}
+
+function clampDialogWidth(width) {
+  const { min, max } = getDialogWidthBounds()
+  return Math.min(Math.max(Math.round(Number(width) || min), min), max)
+}
+
+function resolveDialogWidth() {
+  const baseWidth = dialogWidth.value ?? getDefaultDialogWidth()
+  return clampDialogWidth(baseWidth)
+}
+
+function syncDialogPositionAndWidth() {
+  const mainPanelRect = getMainPanelRect()
+  dialogWidth.value = resolveDialogWidth()
+
+  if (!mainPanelRect) {
+    dialogShiftX.value = 0
+    return
+  }
+
+  const viewportCenter = window.innerWidth / 2
+  const mainPanelCenter = mainPanelRect.left + mainPanelRect.width / 2
+  dialogShiftX.value = Math.round(mainPanelCenter - viewportCenter)
+}
+
+async function loadDialogWidthPreference() {
+  const raw = await api.getSetting('createOrderDialogWidth')
+  const parsed = Number(raw)
+  if (Number.isFinite(parsed) && parsed > 0) {
+    dialogWidth.value = clampDialogWidth(parsed)
+  } else {
+    dialogWidth.value = null
+  }
+  syncDialogPositionAndWidth()
+}
+
+async function persistDialogWidth(width) {
+  await api.setSetting('createOrderDialogWidth', String(clampDialogWidth(width)))
+}
+
+function clearDragStyles() {
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
+
+function bindDragListeners(onMove, onUp) {
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+  removeResizeListeners = () => {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    removeResizeListeners = null
+  }
+}
+
+function startDialogResize(event) {
+  event.preventDefault()
+  const startX = event.clientX
+  const startWidth = resolveDialogWidth()
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+
+  const onMove = (moveEvent) => {
+    dialogWidth.value = clampDialogWidth(startWidth + (moveEvent.clientX - startX))
+    syncDialogPositionAndWidth()
+  }
+
+  const onUp = async () => {
+    if (removeResizeListeners) removeResizeListeners()
+    clearDragStyles()
+    await persistDialogWidth(resolveDialogWidth())
+  }
+
+  bindDragListeners(onMove, onUp)
+}
+
+async function resetDialogWidth() {
+  dialogWidth.value = null
+  syncDialogPositionAndWidth()
+  await api.setSetting('createOrderDialogWidth', '')
+}
+
+function handleViewportResize() {
+  syncDialogPositionAndWidth()
+}
+
+function initMainPanelObserver() {
+  const mainPanel = document.querySelector('.main-panel')
+  if (!mainPanel || typeof ResizeObserver === 'undefined') return
+  if (mainPanelResizeObserver) mainPanelResizeObserver.disconnect()
+  mainPanelResizeObserver = new ResizeObserver(() => {
+    syncDialogPositionAndWidth()
+  })
+  mainPanelResizeObserver.observe(mainPanel)
+}
 
 async function fetchSuggestions(field, query, cb) {
   if (!currentUser.value || !currentUser.value.id) return cb([])
@@ -317,6 +452,11 @@ watch(() => props.visible, (val) => {
   if (val) {
     historyCache.value = {}
     loadDesignTypes()
+    loadDialogWidthPreference()
+    nextTick(() => {
+      initMainPanelObserver()
+      syncDialogPositionAndWidth()
+    })
     if (props.order) {
       form.value = {
         orderType: props.order.orderType || 'thesis',
@@ -346,6 +486,27 @@ watch(() => props.visible, (val) => {
     } else {
       form.value = defaultForm()
     }
+  } else {
+    if (removeResizeListeners) removeResizeListeners()
+    clearDragStyles()
+  }
+})
+
+onMounted(() => {
+  window.addEventListener('resize', handleViewportResize)
+  nextTick(() => {
+    initMainPanelObserver()
+    syncDialogPositionAndWidth()
+  })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleViewportResize)
+  if (removeResizeListeners) removeResizeListeners()
+  clearDragStyles()
+  if (mainPanelResizeObserver) {
+    mainPanelResizeObserver.disconnect()
+    mainPanelResizeObserver = null
   }
 })
 
@@ -437,6 +598,8 @@ async function handleSave() {
 
 .order-dialog :deep(.el-dialog) {
   margin: 0 !important;
+  position: relative;
+  left: var(--gt-order-dialog-offset-x, 0px);
 }
 
 .order-dialog :deep(.el-dialog__body) {
@@ -454,6 +617,35 @@ async function handleSave() {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.dialog-resizer {
+  position: absolute;
+  top: 0;
+  right: -8px;
+  width: 16px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  cursor: col-resize;
+  z-index: 3;
+}
+
+.dialog-resizer::before {
+  content: '';
+  position: absolute;
+  top: 24px;
+  bottom: 24px;
+  left: 6px;
+  width: 4px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dialog-resizer:hover::before {
+  background: rgba(99, 102, 241, 0.46);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
 .form-layout {
