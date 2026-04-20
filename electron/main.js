@@ -308,6 +308,16 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function normalizeSyncUsername(username) {
+  return String(username || '').trim().toLowerCase()
+}
+
+function buildSyncScopeFromUsername(username) {
+  const normalized = normalizeSyncUsername(username)
+  if (!normalized) return `acct-${makeSyncId()}`
+  return `acct-${crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 24)}`
+}
+
 function getOrderSortClause(sortMode) {
   switch (sortMode) {
     case 'deadline_desc':
@@ -379,9 +389,25 @@ function getOrderSortClause(sortMode) {
 function registerIpcHandlers() {
   const db = getDb()
   const SYNC_PREVIEW_LIMIT = 3
+  const SHARED_SYNC_NAMESPACE = 'shared-orders'
 
-  function getSyncSettingKey(userId, suffix) {
-    return `sync:${suffix}:${userId}`
+  function getSyncSettingKey(suffix) {
+    return `sync:${suffix}:${SHARED_SYNC_NAMESPACE}`
+  }
+
+  function ensureUserSyncScope(userRow) {
+    if (!userRow) return null
+    const nextScope = userRow.syncScope || buildSyncScopeFromUsername(userRow.username)
+    if (nextScope !== userRow.syncScope) {
+      db.prepare('UPDATE Users SET syncScope = ? WHERE id = ?').run(nextScope, userRow.id)
+      userRow.syncScope = nextScope
+    }
+    return userRow
+  }
+
+  function getUserSyncProfile(userId) {
+    const row = db.prepare('SELECT id, username, syncScope FROM Users WHERE id = ?').get(userId)
+    return ensureUserSyncScope(row)
   }
 
   function getSyncDeviceId() {
@@ -406,8 +432,12 @@ function registerIpcHandlers() {
     fs.mkdirSync(dirPath, { recursive: true })
   }
 
-  function ensureUserSyncDirs(syncDir, userId) {
-    const baseDir = path.join(syncDir, `user-${userId}`)
+  function getSharedSyncDirName() {
+    return SHARED_SYNC_NAMESPACE
+  }
+
+  function ensureSharedSyncDirs(syncDir) {
+    const baseDir = path.join(syncDir, getSharedSyncDirName())
     const eventsDir = path.join(baseDir, 'events')
     const assetsDir = path.join(baseDir, 'assets')
     ensureDir(eventsDir)
@@ -554,14 +584,17 @@ function registerIpcHandlers() {
   }
 
   function insertSyncEvent({ userId, entityType, entityUuid, action, payload, summaryType, summaryLabel = '', summaryExtra = '' }) {
+    const profile = getUserSyncProfile(userId)
+    if (!profile?.syncScope) return
     db.prepare(`
       INSERT INTO SyncEvents (
-        eventId, userId, deviceId, entityType, entityUuid, action, payload,
+        eventId, userId, syncScope, deviceId, entityType, entityUuid, action, payload,
         summaryType, summaryLabel, summaryExtra, createdAt, exportedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
     `).run(
       makeSyncId(),
       userId,
+      profile.syncScope,
       getSyncDeviceId(),
       entityType,
       entityUuid,
@@ -648,7 +681,7 @@ function registerIpcHandlers() {
   }
 
   function buildPendingSyncSummary(userId) {
-    const lastSyncAt = getSettingValue(getSyncSettingKey(userId, 'lastSuccessAt'))
+    const lastSyncAt = getSettingValue(getSyncSettingKey('lastSuccessAt'))
     const params = [userId, getSyncDeviceId()]
     let query = `
       SELECT eventId, entityType, action, payload, summaryLabel, summaryExtra, createdAt
@@ -746,6 +779,7 @@ function registerIpcHandlers() {
       version: 1,
       eventId: eventRow.eventId,
       userId: eventRow.userId,
+      syncScope: eventRow.syncScope || '',
       deviceId: eventRow.deviceId,
       entityType: eventRow.entityType,
       entityUuid: eventRow.entityUuid,
@@ -986,8 +1020,8 @@ function registerIpcHandlers() {
       .map(name => path.join(eventsDir, name))
   }
 
-  function hasAnyRemoteEvent(syncDir, userId) {
-    const eventsDir = path.join(syncDir, `user-${userId}`, 'events')
+  function hasAnyRemoteEvent(syncDir) {
+    const eventsDir = path.join(syncDir, getSharedSyncDirName(), 'events')
     return listSyncEventFiles(eventsDir).length > 0
   }
 
@@ -1033,7 +1067,7 @@ function registerIpcHandlers() {
   }
 
   function exportPendingSyncEvents(syncDir, userId) {
-    const { eventsDir, assetsDir } = ensureUserSyncDirs(syncDir, userId)
+    const { eventsDir, assetsDir } = ensureSharedSyncDirs(syncDir)
     const pendingRows = db.prepare(`
       SELECT * FROM SyncEvents
       WHERE userId = ? AND deviceId = ? AND exportedAt IS NULL
@@ -1048,14 +1082,13 @@ function registerIpcHandlers() {
   }
 
   function importSyncEvents(syncDir, userId) {
-    const { eventsDir } = ensureUserSyncDirs(syncDir, userId)
+    const { eventsDir } = ensureSharedSyncDirs(syncDir)
     const files = listSyncEventFiles(eventsDir)
     const rawEvents = []
     for (const filePath of files) {
       try {
         const event = JSON.parse(fs.readFileSync(filePath, 'utf8'))
         if (!event?.eventId) continue
-        if (event.userId !== userId) continue
         const applied = db.prepare('SELECT eventId FROM SyncAppliedEvents WHERE eventId = ?').get(event.eventId)
         if (applied) continue
         if (event.deviceId === getSyncDeviceId()) {
@@ -1074,20 +1107,21 @@ function registerIpcHandlers() {
 
   function getSyncOverview(userId) {
     const syncDirectory = getSyncDirectory()
-    const lastSyncAt = getSettingValue(getSyncSettingKey(userId, 'lastSuccessAt'))
     const pendingSummary = buildPendingSyncSummary(userId)
+    const lastSyncAt = getSettingValue(getSyncSettingKey('lastSuccessAt'))
     let status = '待首次同步'
     if (!syncDirectory) status = '未设置同步目录'
     else if (pendingSummary.totalCount > 0) status = '可同步'
     else if (lastSyncAt) status = '已同步'
     return {
       deviceId: getSyncDeviceId(),
+      syncScope: SHARED_SYNC_NAMESPACE,
       syncDirectory,
       lastSyncAt,
       status,
       summary: pendingSummary,
       hint: syncDirectory
-        ? '请先确认 Syncthing 已完成目录同步，再点击同步。'
+        ? '当前版本按统一订单数据池同步，不区分账号。请先确认 Syncthing 已完成目录同步，再点击同步。'
         : '请先选择用于 Syncthing 的同步目录。',
     }
   }
@@ -1126,14 +1160,15 @@ function registerIpcHandlers() {
   ipcMain.handle('auth:register', (_, username, password) => {
     const existing = db.prepare('SELECT id FROM Users WHERE username = ?').get(username)
     if (existing) return { success: false, error: '用户名已存在' }
-    const result = db.prepare('INSERT INTO Users (username, password) VALUES (?, ?)').run(username, password)
-    return { success: true, user: { id: Number(result.lastInsertRowid), username } }
+    const syncScope = buildSyncScopeFromUsername(username)
+    const result = db.prepare('INSERT INTO Users (username, syncScope, password) VALUES (?, ?, ?)').run(username, syncScope, password)
+    return { success: true, user: { id: Number(result.lastInsertRowid), username, syncScope } }
   })
 
   ipcMain.handle('auth:login', (_, username, password) => {
-    const user = db.prepare('SELECT id, username, password FROM Users WHERE username = ?').get(username)
+    const user = ensureUserSyncScope(db.prepare('SELECT id, username, syncScope, password FROM Users WHERE username = ?').get(username))
     if (!user || user.password !== password) return null
-    return { id: user.id, username: user.username }
+    return { id: user.id, username: user.username, syncScope: user.syncScope }
   })
 
   ipcMain.handle('auth:verifyPassword', (_, userId, password) => {
@@ -1447,15 +1482,15 @@ function registerIpcHandlers() {
     if (!userId) return { success: false, error: 'INVALID_USER' }
     const syncDir = getSyncDirectory()
     if (!syncDir) return { success: false, error: 'SYNC_DIR_NOT_SET' }
-    ensureUserSyncDirs(syncDir, userId)
+    ensureSharedSyncDirs(syncDir)
     const localEventCount = db.prepare('SELECT COUNT(*) AS c FROM SyncEvents WHERE userId = ? AND deviceId = ?').get(userId, getSyncDeviceId()).c
-    if (localEventCount === 0 && !hasAnyRemoteEvent(syncDir, userId)) {
+    if (localEventCount === 0 && !hasAnyRemoteEvent(syncDir)) {
       seedBaselineSyncEvents(userId)
     }
     const imported = importSyncEvents(syncDir, userId)
     const exported = exportPendingSyncEvents(syncDir, userId)
     const finishedAt = nowIso()
-    setSettingValue(getSyncSettingKey(userId, 'lastSuccessAt'), finishedAt)
+    setSettingValue(getSyncSettingKey('lastSuccessAt'), finishedAt)
     return {
       success: true,
       imported,
@@ -1478,7 +1513,7 @@ function registerIpcHandlers() {
   ipcMain.handle('migration:export', (_, userId) => {
     if (!userId) return { success: false, error: 'INVALID_USER' }
     const fs = require('fs')
-    const user = db.prepare('SELECT id, username FROM Users WHERE id = ?').get(userId)
+    const user = ensureUserSyncScope(db.prepare('SELECT id, username, syncScope FROM Users WHERE id = ?').get(userId))
     if (!user) return { success: false, error: 'USER_NOT_FOUND' }
     const rootRow = db.prepare('SELECT value FROM Settings WHERE key = ?').get('rootDirectory')
     const orders = db.prepare('SELECT * FROM Orders WHERE userId = ? ORDER BY id ASC').all(userId)
@@ -1494,7 +1529,7 @@ function registerIpcHandlers() {
       formatVersion: 1,
       exportedAt: new Date().toISOString(),
       exportRoot: rootRow?.value || '',
-      user: { id: user.id, username: user.username },
+      user: { id: user.id, username: user.username, syncScope: user.syncScope },
       data: {
         orders,
         revisions,
@@ -1538,6 +1573,9 @@ function registerIpcHandlers() {
     const oldRoot = normalizeRootPath(oldRootOverride || payload.exportRoot || '')
     if (!oldRoot) return { success: false, error: 'MISSING_OLD_ROOT' }
     const normalizedNewRoot = normalizeRootPath(newRoot)
+    const currentUser = ensureUserSyncScope(db.prepare('SELECT id, username, syncScope FROM Users WHERE id = ?').get(currentUserId))
+    if (!currentUser) return { success: false, error: 'USER_NOT_FOUND' }
+    const importedSyncScope = payload.user?.syncScope || currentUser.syncScope || buildSyncScopeFromUsername(currentUser.username)
     const importedOrders = Array.isArray(payload.data.orders) ? payload.data.orders : []
     const importedRevisions = Array.isArray(payload.data.revisions) ? payload.data.revisions : []
     const importedFeedback = Array.isArray(payload.data.feedback) ? payload.data.feedback : []
@@ -1546,6 +1584,8 @@ function registerIpcHandlers() {
     const missingPaths = []
     const missingOrderFolders = []
     const importTxn = db.transaction(() => {
+      db.prepare('UPDATE Users SET syncScope = ? WHERE id = ?').run(importedSyncScope, currentUserId)
+      db.prepare('DELETE FROM SyncEvents WHERE userId = ?').run(currentUserId)
       const orderIds = db.prepare('SELECT id FROM Orders WHERE userId = ?').all(currentUserId).map(r => r.id)
       for (const oid of orderIds) {
         const revIds = db.prepare('SELECT id FROM Revisions WHERE orderId = ?').all(oid).map(r => r.id)
@@ -1569,8 +1609,8 @@ function registerIpcHandlers() {
 
       const orderMap = new Map()
       const insertOrder = db.prepare(`
-        INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, groupChatName, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, isDraftSubmitted, refundAmount, isHandlerPaid, handlerPaidAmount)
-        VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @groupChatName, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, @isDesignFinished, @folderPath, @graduationYear, @createdAt, @isDraftSubmitted, @refundAmount, @isHandlerPaid, @handlerPaidAmount)
+        INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, groupChatName, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, isDraftSubmitted, refundAmount, isHandlerPaid, handlerPaidAmount, syncUuid)
+        VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @groupChatName, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, @isDesignFinished, @folderPath, @graduationYear, @createdAt, @isDraftSubmitted, @refundAmount, @isHandlerPaid, @handlerPaidAmount, @syncUuid)
       `)
       for (const o of importedOrders) {
         const mappedPath = replacePathPrefix(oldRoot, normalizedNewRoot, o.folderPath || '')
@@ -1605,6 +1645,7 @@ function registerIpcHandlers() {
           refundAmount: Number(o.refundAmount) || 0,
           isHandlerPaid: Number(o.isHandlerPaid) || 0,
           handlerPaidAmount: Number(o.handlerPaidAmount) || 0,
+          syncUuid: o.syncUuid || makeSyncId(),
         })
         orderMap.set(o.id, Number(result.lastInsertRowid))
         if (mappedPath && !fs.existsSync(mappedPath)) {
@@ -1620,7 +1661,7 @@ function registerIpcHandlers() {
 
       const revMap = new Map()
       const insertRev = db.prepare(
-        'INSERT INTO Revisions (orderId, title, folderPath, deadline, isExpanded, createdAt) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO Revisions (orderId, title, folderPath, deadline, isExpanded, createdAt, syncUuid) VALUES (?, ?, ?, ?, ?, ?, ?)'
       )
       for (const r of importedRevisions) {
         const mappedOrderId = orderMap.get(r.orderId)
@@ -1632,14 +1673,15 @@ function registerIpcHandlers() {
           mappedPath,
           r.deadline || null,
           Number(r.isExpanded) || 0,
-          r.createdAt || new Date().toISOString()
+          r.createdAt || new Date().toISOString(),
+          r.syncUuid || makeSyncId()
         )
         revMap.set(r.id, Number(result.lastInsertRowid))
         if (mappedPath && !fs.existsSync(mappedPath) && missingPaths.length < 30) missingPaths.push(mappedPath)
       }
 
       const insertFeedback = db.prepare(
-        'INSERT INTO FeedbackItems (revisionId, content, isResolved, hasImage, imagePath, attachments) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO FeedbackItems (revisionId, content, isResolved, hasImage, imagePath, attachments, syncUuid) VALUES (?, ?, ?, ?, ?, ?, ?)'
       )
       for (const fi of importedFeedback) {
         const mappedRevId = revMap.get(fi.revisionId)
@@ -1652,7 +1694,8 @@ function registerIpcHandlers() {
           Number(fi.isResolved) || 0,
           Number(fi.hasImage) || 0,
           mappedImagePath,
-          mappedAttachments
+          mappedAttachments,
+          fi.syncUuid || makeSyncId()
         )
       }
 
@@ -1665,8 +1708,11 @@ function registerIpcHandlers() {
       return { success: false, error: err.message || 'IMPORT_FAILED' }
     }
 
+    setSettingValue(getSyncSettingKey('lastSuccessAt'), '')
+
     return {
       success: true,
+      syncScope: importedSyncScope,
       summary: {
         orderCount: importedOrders.length,
         revisionCount: importedRevisions.length,

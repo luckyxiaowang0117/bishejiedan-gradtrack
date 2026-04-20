@@ -1,7 +1,18 @@
 const path = require('path')
+const crypto = require('crypto')
 const { app } = require('electron')
 
 let db = null
+
+function normalizeSyncUsername(username) {
+  return String(username || '').trim().toLowerCase()
+}
+
+function buildSyncScopeFromUsername(username) {
+  const normalized = normalizeSyncUsername(username)
+  if (!normalized) return `acct-${crypto.randomUUID().replace(/-/g, '')}`
+  return `acct-${crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 24)}`
+}
 
 function initDatabase() {
   const Database = require('better-sqlite3')
@@ -75,6 +86,7 @@ function createTables() {
     CREATE TABLE IF NOT EXISTS Users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,
+      syncScope TEXT,
       password TEXT NOT NULL,
       createdAt DATETIME DEFAULT (datetime('now'))
     );
@@ -82,6 +94,7 @@ function createTables() {
     CREATE TABLE IF NOT EXISTS SyncEvents (
       eventId TEXT PRIMARY KEY,
       userId INTEGER NOT NULL,
+      syncScope TEXT,
       deviceId TEXT NOT NULL,
       entityType TEXT NOT NULL,
       entityUuid TEXT NOT NULL,
@@ -219,10 +232,35 @@ function runMigrations() {
   }
   db.exec("UPDATE FeedbackItems SET syncUuid = lower(hex(randomblob(16))) WHERE syncUuid IS NULL OR syncUuid = ''")
 
+  const userCols = db.prepare("PRAGMA table_info(Users)").all()
+  if (!userCols.find(c => c.name === 'syncScope')) {
+    db.exec("ALTER TABLE Users ADD COLUMN syncScope TEXT")
+  }
+  const usersMissingScope = db.prepare("SELECT id, username FROM Users WHERE syncScope IS NULL OR syncScope = ''").all()
+  const updateUserScope = db.prepare('UPDATE Users SET syncScope = ? WHERE id = ?')
+  for (const user of usersMissingScope) {
+    updateUserScope.run(buildSyncScopeFromUsername(user.username), user.id)
+  }
+
+  const syncEventCols = db.prepare("PRAGMA table_info(SyncEvents)").all()
+  if (!syncEventCols.find(c => c.name === 'syncScope')) {
+    db.exec("ALTER TABLE SyncEvents ADD COLUMN syncScope TEXT")
+  }
+  db.exec(`
+    UPDATE SyncEvents
+    SET syncScope = (
+      SELECT Users.syncScope
+      FROM Users
+      WHERE Users.id = SyncEvents.userId
+    )
+    WHERE syncScope IS NULL OR syncScope = ''
+  `)
+
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_sync_uuid ON Orders(syncUuid)")
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_revisions_sync_uuid ON Revisions(syncUuid)")
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_sync_uuid ON FeedbackItems(syncUuid)")
   db.exec("CREATE INDEX IF NOT EXISTS idx_sync_events_user_device_created ON SyncEvents(userId, deviceId, createdAt)")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_sync_events_scope_device_created ON SyncEvents(syncScope, deviceId, createdAt)")
   db.exec("CREATE INDEX IF NOT EXISTS idx_sync_events_exported ON SyncEvents(exportedAt)")
 }
 
