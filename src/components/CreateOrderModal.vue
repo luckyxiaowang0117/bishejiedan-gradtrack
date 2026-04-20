@@ -2,7 +2,7 @@
   <el-dialog
     v-model="dialogVisible"
     :title="isEditing ? '编辑订单信息' : '新建接单项目'"
-    width="var(--gt-dialog-md)"
+    width="var(--gt-dialog-order)"
     align-center
     :close-on-click-modal="false"
     destroy-on-close
