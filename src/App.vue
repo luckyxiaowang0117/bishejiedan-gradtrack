@@ -10,6 +10,7 @@
   <!-- Main App -->
   <div v-else class="app-layout">
     <Sidebar
+      :app-version="appVersion"
       :orders="filteredOrders"
       :selectedOrderId="selectedOrderId"
       :filter="filter"
@@ -98,8 +99,10 @@ import OrderPanel from './components/OrderPanel.vue'
 import StatsPanel from './components/StatsPanel.vue'
 import CreateOrderModal from './components/CreateOrderModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
+import packageJson from '../package.json'
 
 const api = window.electronAPI
+const appVersion = packageJson.version
 
 // Platform detection
 const isWindows = ref(false)

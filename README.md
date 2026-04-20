@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-- 应用版本：`4.2.0`
+- 应用版本：`4.3.0`
 - 技术栈：`Vue 3`、`Vite`、`Electron`、`better-sqlite3`
 
 ## 开发命令
@@ -18,7 +18,8 @@ npm run build:win
 ## 版本管理约定
 
 - Git 仓库只保存源码、配置、文档。
-- `node_modules/`、`dist/`、`release/` 等构建产物不提交。
+- `node_modules/`、`dist/` 等构建产物不提交。
+- 大体积安装包如需随版本一并归档，使用 Git LFS 管理。
 - 本地数据库和运行时数据不提交。
 - 每次正式发布时：
   1. 更新 `package.json` 版本号。
@@ -27,4 +28,3 @@ npm run build:win
   4. 将安装包上传到 GitHub Releases 做归档。
 
 详细归档记录见 [ARCHIVE.md](./ARCHIVE.md)。
-

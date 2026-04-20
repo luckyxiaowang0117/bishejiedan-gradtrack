@@ -9,7 +9,10 @@
         <div class="brand-icon">
           <el-icon :size="18"><DataBoard /></el-icon>
         </div>
-        <h1 class="brand-title">接单管理助手</h1>
+        <div class="brand-copy">
+          <h1 class="brand-title">接单管理助手</h1>
+          <span class="brand-version">v{{ appVersion }}</span>
+        </div>
       </div>
       <el-input
         :model-value="search"
@@ -210,6 +213,12 @@
           <span><el-icon :size="12"><SetUp /></el-icon> 处理人: {{ order.handler || '本人' }}</span>
         </div>
 
+        <div v-if="order.groupChatName" class="card-group-chat">
+          <el-icon :size="12"><ChatDotRound /></el-icon>
+          <span class="card-group-chat-label">群聊名称:</span>
+          <span class="card-group-chat-value">{{ order.groupChatName }}</span>
+        </div>
+
         <div class="card-bottom">
           <div class="card-badges">
             <!-- 已交付初稿后的状态显示 -->
@@ -298,6 +307,7 @@
 import { computed, ref } from 'vue'
 
 const props = defineProps({
+  appVersion: String,
   orders: Array,
   selectedOrderId: Number,
   filter: String,
@@ -439,6 +449,13 @@ function getStatus(order) {
   margin-bottom: 14px;
 }
 
+.brand-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
 .brand-icon {
   width: 32px;
   height: 32px;
@@ -454,6 +471,18 @@ function getStatus(order) {
   font-size: 16px;
   font-weight: 700;
   color: #1e293b;
+}
+
+.brand-version {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6366f1;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  padding: 2px 8px;
+  line-height: 1.2;
+  flex-shrink: 0;
 }
 
 .search-input :deep(.el-input__wrapper) {
@@ -937,11 +966,33 @@ function getStatus(order) {
   font-size: 12px;
   color: #64748b;
   margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 .card-people span {
   display: flex;
   align-items: center;
   gap: 3px;
+}
+
+.card-group-chat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+
+.card-group-chat-label {
+  flex-shrink: 0;
+}
+
+.card-group-chat-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-bottom {
