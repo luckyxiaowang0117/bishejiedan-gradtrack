@@ -3,7 +3,7 @@
     :model-value="visible"
     @update:model-value="$emit('update:visible', $event)"
     :title="isEditing ? '编辑订单信息' : '新建接单项目'"
-    width="560px"
+    width="var(--gt-dialog-md)"
     :close-on-click-modal="false"
     destroy-on-close
     top="5vh"

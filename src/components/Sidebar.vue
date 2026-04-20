@@ -574,9 +574,9 @@ function getStatus(order) {
 
 <style scoped>
 .sidebar {
-  width: fit-content;
-  min-width: 410px;
-  max-width: 560px;
+  width: var(--gt-sidebar-width);
+  min-width: var(--gt-sidebar-width);
+  max-width: var(--gt-sidebar-width);
   background: #fff;
   border-right: 1px solid #e2e8f0;
   display: flex;
@@ -589,7 +589,7 @@ function getStatus(order) {
 }
 
 .drag-region {
-  height: 44px;
+  height: var(--gt-drag-height);
   flex-shrink: 0;
   -webkit-app-region: drag;
 }
@@ -599,7 +599,7 @@ function getStatus(order) {
 }
 
 .sidebar-head {
-  padding: 0 20px 20px;
+  padding: 0 var(--gt-sidebar-head-px) var(--gt-sidebar-head-pb);
   border-bottom: 1px solid #f1f5f9;
   flex-shrink: 0;
 }
@@ -608,7 +608,7 @@ function getStatus(order) {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .brand-copy {
@@ -619,8 +619,8 @@ function getStatus(order) {
 }
 
 .brand-icon {
-  width: 32px;
-  height: 32px;
+  width: var(--gt-brand-icon-size);
+  height: var(--gt-brand-icon-size);
   border-radius: 8px;
   background: #4f46e5;
   color: white;
@@ -630,7 +630,7 @@ function getStatus(order) {
 }
 
 .brand-title {
-  font-size: 16px;
+  font-size: var(--gt-brand-title-size);
   font-weight: 700;
   color: #1e293b;
 }
@@ -669,7 +669,7 @@ function getStatus(order) {
 
 .grad-seg {
   display: flex;
-  padding: 10px 16px 0;
+  padding: 10px var(--gt-sidebar-section-px) 0;
   gap: 4px;
   background: #f8fafc;
   flex-wrap: wrap;
@@ -725,7 +725,7 @@ function getStatus(order) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 16px 14px;
+  padding: 12px var(--gt-sidebar-section-px) 14px;
   background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
   border-bottom: 1px solid #e2e8f0;
 }
@@ -737,7 +737,7 @@ function getStatus(order) {
 }
 
 .type-seg-btn {
-  min-height: 36px;
+  min-height: var(--gt-filter-btn-height);
   padding: 8px 10px;
   font-size: 12px;
   font-weight: 700;
@@ -773,7 +773,7 @@ function getStatus(order) {
 }
 
 .filter-body {
-  padding: 10px 16px 12px;
+  padding: 10px var(--gt-sidebar-section-px) 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1077,7 +1077,7 @@ function getStatus(order) {
 .order-list {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 10px var(--gt-sidebar-section-px);
 }
 
 .order-group + .order-group {
@@ -1093,7 +1093,7 @@ function getStatus(order) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 6px;
+  padding: 7px 6px;
   width: 100%;
   border: none;
   background: rgba(248, 250, 252, 0.96);
@@ -1150,7 +1150,7 @@ function getStatus(order) {
 }
 
 .order-card {
-  padding: 14px 16px;
+  padding: var(--gt-order-card-py) var(--gt-order-card-px);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1179,7 +1179,7 @@ function getStatus(order) {
 }
 
 .card-title {
-  font-size: 13px;
+  font-size: var(--gt-text-sm);
   font-weight: 600;
   line-height: 1.4;
   color: #1e293b;
@@ -1205,7 +1205,7 @@ function getStatus(order) {
 }
 
 .card-school {
-  font-size: 11px;
+  font-size: var(--gt-text-xs);
   color: #64748b;
   background: #f1f5f9;
   padding: 2px 6px;
@@ -1219,7 +1219,7 @@ function getStatus(order) {
 .card-people {
   display: flex;
   gap: 12px;
-  font-size: 12px;
+  font-size: var(--gt-text-xs);
   color: #64748b;
   margin-bottom: 10px;
   flex-wrap: wrap;
@@ -1235,7 +1235,7 @@ function getStatus(order) {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--gt-text-xs);
   color: #64748b;
   margin-bottom: 10px;
   min-width: 0;
@@ -1332,7 +1332,7 @@ function getStatus(order) {
 }
 
 .sidebar-foot {
-  padding: 16px;
+  padding: 12px var(--gt-sidebar-section-px);
   border-top: 1px solid #e2e8f0;
   background: #fff;
 }

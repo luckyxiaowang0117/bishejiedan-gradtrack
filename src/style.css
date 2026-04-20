@@ -4,6 +4,106 @@
   box-sizing: border-box;
 }
 
+:root {
+  --gt-base-font-size: 14px;
+  --gt-shell-bg: #f8fafc;
+  --gt-drag-height: 44px;
+  --gt-topbar-height: 56px;
+  --gt-sidebar-width: clamp(390px, 23vw, 500px);
+  --gt-sidebar-head-px: 20px;
+  --gt-sidebar-head-pb: 20px;
+  --gt-sidebar-section-px: 16px;
+  --gt-page-pad: 32px;
+  --gt-page-pad-y: 32px;
+  --gt-card-pad: 24px;
+  --gt-card-gap: 24px;
+  --gt-content-max-width: 900px;
+  --gt-brand-icon-size: 32px;
+  --gt-brand-title-size: 16px;
+  --gt-title-xl: 22px;
+  --gt-title-lg: 18px;
+  --gt-title-md: 16px;
+  --gt-text-sm: 13px;
+  --gt-text-xs: 12px;
+  --gt-filter-btn-height: 36px;
+  --gt-order-card-py: 14px;
+  --gt-order-card-px: 16px;
+  --gt-empty-icon-box: 96px;
+  --gt-empty-title-size: 18px;
+  --gt-empty-sub-size: 13px;
+  --gt-dialog-sm: min(420px, calc(100vw - 24px));
+  --gt-dialog-md: min(560px, calc(100vw - 24px));
+  --gt-dialog-lg: min(600px, calc(100vw - 24px));
+  --gt-dialog-xl: min(760px, calc(100vw - 24px));
+}
+
+@media (max-width: 2200px), (max-height: 1180px) {
+  :root {
+    --gt-base-font-size: 13px;
+    --gt-drag-height: 40px;
+    --gt-topbar-height: 52px;
+    --gt-sidebar-width: clamp(350px, 22vw, 440px);
+    --gt-sidebar-head-px: 18px;
+    --gt-sidebar-head-pb: 16px;
+    --gt-sidebar-section-px: 14px;
+    --gt-page-pad: 24px;
+    --gt-page-pad-y: 24px;
+    --gt-card-pad: 20px;
+    --gt-card-gap: 18px;
+    --gt-content-max-width: 840px;
+    --gt-brand-icon-size: 30px;
+    --gt-brand-title-size: 15px;
+    --gt-title-xl: 20px;
+    --gt-title-lg: 17px;
+    --gt-title-md: 15px;
+    --gt-text-sm: 12px;
+    --gt-text-xs: 11px;
+    --gt-filter-btn-height: 34px;
+    --gt-order-card-py: 12px;
+    --gt-order-card-px: 14px;
+    --gt-empty-icon-box: 84px;
+    --gt-empty-title-size: 17px;
+    --gt-empty-sub-size: 12px;
+    --gt-dialog-md: min(520px, calc(100vw - 24px));
+    --gt-dialog-lg: min(560px, calc(100vw - 24px));
+    --gt-dialog-xl: min(720px, calc(100vw - 24px));
+  }
+}
+
+@media (max-width: 1680px), (max-height: 940px) {
+  :root {
+    --gt-base-font-size: 13px;
+    --gt-drag-height: 36px;
+    --gt-topbar-height: 48px;
+    --gt-sidebar-width: clamp(320px, 21vw, 380px);
+    --gt-sidebar-head-px: 16px;
+    --gt-sidebar-head-pb: 14px;
+    --gt-sidebar-section-px: 12px;
+    --gt-page-pad: 18px;
+    --gt-page-pad-y: 18px;
+    --gt-card-pad: 16px;
+    --gt-card-gap: 14px;
+    --gt-content-max-width: 780px;
+    --gt-brand-icon-size: 28px;
+    --gt-brand-title-size: 14px;
+    --gt-title-xl: 18px;
+    --gt-title-lg: 16px;
+    --gt-title-md: 14px;
+    --gt-text-sm: 12px;
+    --gt-text-xs: 11px;
+    --gt-filter-btn-height: 32px;
+    --gt-order-card-py: 10px;
+    --gt-order-card-px: 12px;
+    --gt-empty-icon-box: 72px;
+    --gt-empty-title-size: 16px;
+    --gt-empty-sub-size: 12px;
+    --gt-dialog-sm: min(400px, calc(100vw - 20px));
+    --gt-dialog-md: min(500px, calc(100vw - 20px));
+    --gt-dialog-lg: min(540px, calc(100vw - 20px));
+    --gt-dialog-xl: min(660px, calc(100vw - 20px));
+  }
+}
+
 html, body, #root {
   height: 100%;
   overflow: hidden;
@@ -14,9 +114,9 @@ body {
     'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
     'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: #f8fafc;
+  background: var(--gt-shell-bg);
   color: #1e293b;
-  font-size: 14px;
+  font-size: var(--gt-base-font-size);
 }
 
 ::-webkit-scrollbar {
@@ -41,9 +141,12 @@ body {
 
 .el-dialog {
   border-radius: 16px !important;
+  max-width: calc(100vw - 24px) !important;
+  margin: 0 auto;
 }
 .el-message-box {
   border-radius: 16px !important;
+  max-width: calc(100vw - 24px) !important;
 }
 
 .line-through-text {

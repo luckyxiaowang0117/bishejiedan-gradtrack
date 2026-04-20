@@ -3,7 +3,7 @@
     :model-value="visible"
     @update:model-value="$emit('update:visible', $event)"
     title="设置"
-    width="600px"
+    width="var(--gt-dialog-lg)"
     :close-on-click-modal="false"
     :destroy-on-close="false"
     :before-close="handleClose"
@@ -220,7 +220,7 @@
   <el-dialog
     v-model="missingFolderDialogVisible"
     title="导入完成（部分路径缺失）"
-    width="760px"
+    width="var(--gt-dialog-xl)"
     :close-on-click-modal="false"
     top="8vh"
   >

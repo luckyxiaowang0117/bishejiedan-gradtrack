@@ -683,10 +683,10 @@ function rankChart(items) {
 }
 
 .stats-header {
-  height: 56px;
+  height: var(--gt-topbar-height);
   background: #fff;
   border-bottom: 1px solid #e2e8f0;
-  padding: 0 32px;
+  padding: 0 var(--gt-page-pad);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -698,7 +698,7 @@ function rankChart(items) {
   gap: 10px;
 }
 .stats-title {
-  font-size: 18px;
+  font-size: var(--gt-title-lg);
   font-weight: 700;
   color: #1e293b;
 }
@@ -709,7 +709,7 @@ function rankChart(items) {
 .stats-content {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 32px;
+  padding: calc(var(--gt-page-pad-y) - 4px) var(--gt-page-pad);
 }
 
 /* Time Filter */
@@ -720,8 +720,8 @@ function rankChart(items) {
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 12px 20px;
-  margin-bottom: 20px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 .time-filter-left {
@@ -730,7 +730,7 @@ function rankChart(items) {
   gap: 8px;
 }
 .time-filter-label {
-  font-size: 14px;
+  font-size: var(--gt-text-sm);
   font-weight: 600;
   color: #334155;
 }
@@ -786,7 +786,7 @@ function rankChart(items) {
   gap: 12px;
 }
 .time-filter-summary {
-  font-size: 13px;
+  font-size: var(--gt-text-sm);
   color: #6366f1;
   font-weight: 500;
   background: #eef2ff;
@@ -798,22 +798,22 @@ function rankChart(items) {
 .kpi-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 14px;
+  margin-bottom: var(--gt-card-gap);
 }
 .kpi-card {
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  padding: 20px;
+  padding: var(--gt-card-pad);
   display: flex;
   align-items: center;
   gap: 16px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 .kpi-icon {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -821,7 +821,7 @@ function rankChart(items) {
   flex-shrink: 0;
 }
 .kpi-value {
-  font-size: 22px;
+  font-size: var(--gt-title-xl);
   font-weight: 700;
   color: #1e293b;
   line-height: 1.2;
@@ -841,8 +841,8 @@ function rankChart(items) {
 .chart-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 14px;
+  margin-bottom: 14px;
 }
 .chart-row.triple {
   grid-template-columns: 1fr 1fr 1fr;
@@ -851,11 +851,11 @@ function rankChart(items) {
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  padding: 20px;
+  padding: var(--gt-card-pad);
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 .chart-title {
-  font-size: 14px;
+  font-size: var(--gt-text-sm);
   font-weight: 600;
   color: #334155;
   margin-bottom: 12px;

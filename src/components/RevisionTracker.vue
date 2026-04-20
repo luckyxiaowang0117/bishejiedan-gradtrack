@@ -28,7 +28,7 @@
     <el-dialog
       v-model="showCreateDialog"
       title="新增修改轮次"
-      width="420px"
+      width="var(--gt-dialog-sm)"
       :close-on-click-modal="false"
       destroy-on-close
     >

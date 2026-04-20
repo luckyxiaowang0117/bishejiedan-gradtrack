@@ -622,7 +622,7 @@ watch([filter, sortMode, groupMode], () => {
 .app-layout {
   display: flex;
   height: 100vh;
-  background: #f8fafc;
+  background: var(--gt-shell-bg);
 }
 
 .main-panel {
@@ -634,7 +634,7 @@ watch([filter, sortMode, groupMode], () => {
 }
 
 .main-drag {
-  height: 44px;
+  height: var(--gt-drag-height);
   flex-shrink: 0;
   -webkit-app-region: drag;
   display: flex;
@@ -685,30 +685,31 @@ watch([filter, sortMode, groupMode], () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding-bottom: 80px;
+  padding: 0 var(--gt-page-pad);
+  padding-bottom: calc(var(--gt-page-pad-y) * 2 + 16px);
 }
 
 .empty-icon-box {
-  width: 96px;
-  height: 96px;
+  width: var(--gt-empty-icon-box);
+  height: var(--gt-empty-icon-box);
   border-radius: 16px;
   background: #f1f5f9;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 24px;
+  margin-bottom: var(--gt-card-gap);
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 .empty-title {
-  font-size: 18px;
+  font-size: var(--gt-empty-title-size);
   font-weight: 500;
   color: #475569;
   margin-bottom: 8px;
 }
 
 .empty-sub {
-  font-size: 13px;
+  font-size: var(--gt-empty-sub-size);
   color: #94a3b8;
 }
 </style>
