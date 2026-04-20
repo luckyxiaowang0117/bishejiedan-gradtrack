@@ -101,7 +101,14 @@ const folders = ref([])
 function buildFolders() {
   const base = props.folderPath
   if (!base) { folders.value = []; return }
-  const defsMap = { thesis: thesisFolderDefs, format: formatFolderDefs, translation: translationFolderDefs }
+  const defsMap = {
+    thesis: thesisFolderDefs,
+    format: formatFolderDefs,
+    translation: translationFolderDefs,
+    design: thesisFolderDefs,
+    reduction: formatFolderDefs,
+    special: formatFolderDefs,
+  }
   const defs = defsMap[props.orderType] || thesisFolderDefs
   folders.value = defs
     .filter(d => !d.designOnly || props.includesDesign)

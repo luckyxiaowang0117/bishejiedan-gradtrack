@@ -91,11 +91,15 @@
               <span class="cell-label">是否有原文</span>
               <span class="cell-value">{{ order.hasOriginalText ? '有' : '无' }}</span>
             </div>
+            <div v-if="order.orderType === 'special'" class="info-cell">
+              <span class="cell-label">服务项目</span>
+              <span class="cell-value">{{ order.specialService || '未填写' }}</span>
+            </div>
             <div class="info-cell">
               <span class="cell-label">交稿期限<template v-if="isUrgent"><span class="urgent-mark">(急)</span></template></span>
               <span class="cell-value" :class="{ 'text-urgent': isUrgent || isOverdue }">{{ order.deadline }}</span>
             </div>
-            <div v-if="order.orderType === 'thesis'" class="info-cell">
+            <div v-if="['thesis', 'design'].includes(order.orderType)" class="info-cell">
               <span class="cell-label">设计</span>
               <span class="cell-value">
                 <el-tag v-if="order.includesDesign" type="success" size="small" effect="plain">包含</el-tag>
@@ -299,6 +303,9 @@ const orderTypeMap = {
   thesis: { label: '毕设论文', color: '#6366f1' },
   format: { label: '格式修改', color: '#0ea5e9' },
   translation: { label: '外文翻译', color: '#f59e0b' },
+  design: { label: '设计定制', color: '#8b5cf6' },
+  reduction: { label: '论文降重', color: '#10b981' },
+  special: { label: '特殊订单', color: '#ef4444' },
 }
 const orderTypeMeta = computed(() => orderTypeMap[props.order.orderType] || orderTypeMap.thesis)
 
@@ -348,7 +355,7 @@ const daysLeft = computed(() => Math.ceil(hoursLeft.value / 24))
 const isUrgent = computed(() => {
   if (hoursLeft.value < 0) return false
   const type = props.order.orderType || 'thesis'
-  if (type === 'thesis') return daysLeft.value <= 2
+  if (['thesis', 'design'].includes(type)) return daysLeft.value <= 2
   return hoursLeft.value <= 2
 })
 const isOverdue = computed(() => hoursLeft.value < 0)

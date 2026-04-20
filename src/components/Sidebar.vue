@@ -469,12 +469,18 @@ const typeFilters = [
   { key: 'thesis', label: '毕设论文' },
   { key: 'format', label: '格式修改' },
   { key: 'translation', label: '外文翻译' },
+  { key: 'design', label: '设计定制' },
+  { key: 'reduction', label: '论文降重' },
+  { key: 'special', label: '特殊订单' },
 ]
 
 const orderTypeMap = {
   thesis: { label: '毕设论文', color: '#6366f1' },
   format: { label: '格式修改', color: '#0ea5e9' },
   translation: { label: '外文翻译', color: '#f59e0b' },
+  design: { label: '设计定制', color: '#8b5cf6' },
+  reduction: { label: '论文降重', color: '#10b981' },
+  special: { label: '特殊订单', color: '#ef4444' },
 }
 
 function isGroupExpanded(key) {
@@ -500,7 +506,7 @@ function getStatus(order) {
     const diffDays = diffHours / 24
 
     const type = order.orderType || 'thesis'
-    if (type === 'thesis') {
+    if (['thesis', 'design'].includes(type)) {
       if (diffDays <= 0) deliveryStatus = 'danger'
       else if (diffDays <= 2) deliveryStatus = 'warning'
     } else {

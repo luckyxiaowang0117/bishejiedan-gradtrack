@@ -503,6 +503,7 @@ function registerIpcHandlers() {
       orderType: '订单类型',
       formatMode: '合作模式',
       hasOriginalText: '有无原文',
+      specialService: '服务项目',
       isDesignFinished: '是否完成',
       isDraftSubmitted: '是否交初稿',
       graduationYear: '毕业年份',
@@ -845,6 +846,7 @@ function registerIpcHandlers() {
       orderType: order.orderType || 'thesis',
       formatMode: order.formatMode || '',
       hasOriginalText: Number(order.hasOriginalText) || 0,
+      specialService: order.specialService || '',
       receiver: order.receiver || '',
       handler: order.handler || '',
       advisor: order.advisor || '',
@@ -880,6 +882,7 @@ function registerIpcHandlers() {
           orderType = @orderType,
           formatMode = @formatMode,
           hasOriginalText = @hasOriginalText,
+          specialService = @specialService,
           receiver = @receiver,
           handler = @handler,
           advisor = @advisor,
@@ -902,13 +905,13 @@ function registerIpcHandlers() {
         INSERT INTO Orders (
           userId, title, university, college, major, studentName, wechatName, groupChatName,
           includesDesign, designType, designSubType, designStatus, orderType, formatMode,
-          hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount,
+          hasOriginalText, specialService, receiver, handler, advisor, deadline, totalAmount, paidAmount,
           dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt,
           isDraftSubmitted, refundAmount, isHandlerPaid, handlerPaidAmount, syncUuid
         ) VALUES (
           @userId, @title, @university, @college, @major, @studentName, @wechatName, @groupChatName,
           @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode,
-          @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount,
+          @hasOriginalText, @specialService, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount,
           @dispatchAmount, @isDesignFinished, @folderPath, @graduationYear, @createdAt,
           @isDraftSubmitted, @refundAmount, @isHandlerPaid, @handlerPaidAmount, @syncUuid
         )
@@ -1773,9 +1776,9 @@ function registerIpcHandlers() {
     }
 
     if (search) {
-      query += ` AND (o.title LIKE ? OR o.university LIKE ? OR o.college LIKE ? OR o.major LIKE ? OR o.advisor LIKE ? OR o.receiver LIKE ? OR o.handler LIKE ? OR o.studentName LIKE ? OR o.wechatName LIKE ? OR o.groupChatName LIKE ?)`
+      query += ` AND (o.title LIKE ? OR o.university LIKE ? OR o.college LIKE ? OR o.major LIKE ? OR o.advisor LIKE ? OR o.receiver LIKE ? OR o.handler LIKE ? OR o.studentName LIKE ? OR o.wechatName LIKE ? OR o.groupChatName LIKE ? OR o.specialService LIKE ?)`
       const s = `%${search}%`
-      params.push(s, s, s, s, s, s, s, s, s, s)
+      params.push(s, s, s, s, s, s, s, s, s, s, s)
     }
 
     query += ` ORDER BY ${getOrderSortClause(sortMode)}`
@@ -1794,14 +1797,14 @@ function registerIpcHandlers() {
 
   ipcMain.handle('orders:create', (_, data) => {
     const stmt = db.prepare(`
-      INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, groupChatName, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, syncUuid)
-      VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @groupChatName, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, 0, @folderPath, @graduationYear, datetime('now'), @syncUuid)
+      INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, syncUuid)
+      VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, 0, @folderPath, @graduationYear, datetime('now'), @syncUuid)
     `)
     const now = new Date()
     const defaultGradYear = now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear()
     const result = stmt.run({
       designType: '', designSubType: '', designStatus: '',
-      orderType: 'thesis', formatMode: '', hasOriginalText: 0,
+      orderType: 'thesis', formatMode: '', hasOriginalText: 0, specialService: '',
       dispatchAmount: 0, graduationYear: defaultGradYear, syncUuid: makeSyncId(),
       ...data,
     })
@@ -2147,7 +2150,14 @@ function registerIpcHandlers() {
 
   ipcMain.handle('fs:generateOrderFolder', (_, { rootDirectory, university, major, studentName, title, includesDesign, orderType }) => {
     const type = orderType || 'thesis'
-    const typeSubDirs = { thesis: '毕业设计', format: '格式修改', translation: '外文翻译' }
+    const typeSubDirs = {
+      thesis: '毕业设计',
+      format: '格式修改',
+      translation: '外文翻译',
+      design: '毕业设计',
+      reduction: '论文降重',
+      special: '特殊订单',
+    }
     const subDir = typeSubDirs[type] || '毕业设计'
     const year = new Date().getFullYear()
     
@@ -2169,7 +2179,7 @@ function registerIpcHandlers() {
     try {
       const fs = require('fs')
       fs.mkdirSync(folderPath, { recursive: true })
-      if (type === 'format') {
+      if (['format', 'reduction', 'special'].includes(type)) {
         fs.mkdirSync(path.join(folderPath, '客户源文件'), { recursive: true })
         fs.mkdirSync(path.join(folderPath, '修改后文件'), { recursive: true })
         fs.mkdirSync(path.join(folderPath, '客户要求'), { recursive: true })
@@ -2181,7 +2191,7 @@ function registerIpcHandlers() {
         fs.mkdirSync(path.join(folderPath, '论文文件', '论文稿件'), { recursive: true })
         fs.mkdirSync(path.join(folderPath, '论文文件', '论文稿件', '初稿'), { recursive: true })
         fs.mkdirSync(path.join(folderPath, '客户提供的需求文件'), { recursive: true })
-        if (includesDesign) {
+        if (includesDesign || type === 'design') {
           fs.mkdirSync(path.join(folderPath, '设计文件'), { recursive: true })
         }
       }

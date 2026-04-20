@@ -42,6 +42,7 @@ function createTables() {
       studentName TEXT DEFAULT '',
       wechatName TEXT DEFAULT '',
       groupChatName TEXT DEFAULT '',
+      specialService TEXT DEFAULT '',
       includesDesign INTEGER DEFAULT 0,
       receiver TEXT DEFAULT '本人',
       handler TEXT DEFAULT '本人',
@@ -155,6 +156,7 @@ function runMigrations() {
     { name: 'orderType', def: "TEXT DEFAULT 'thesis'" },
     { name: 'formatMode', def: "TEXT DEFAULT ''" },
     { name: 'hasOriginalText', def: "INTEGER DEFAULT 0" },
+    { name: 'specialService', def: "TEXT DEFAULT ''" },
   ]
   const latestOrderCols = db.prepare("PRAGMA table_info(Orders)").all()
   for (const col of typeCols) {

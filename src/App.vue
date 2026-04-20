@@ -114,7 +114,12 @@ const ORDER_TYPE_MAP = {
   thesis: '毕设论文',
   format: '格式修改',
   translation: '外文翻译',
+  design: '设计定制',
+  reduction: '论文降重',
+  special: '特殊订单',
 }
+
+const ORDER_TYPE_ORDER = ['thesis', 'format', 'translation', 'design', 'reduction', 'special']
 
 const SORT_OPTIONS = [
   { key: 'urgency_desc', label: '紧急优先' },
@@ -371,7 +376,8 @@ function buildGroupMeta(mode, key) {
     return { label: key ? `${key}届` : '未填写届别', order: key ? 9999 - Number(key) : 9999, description: '按毕业年份回看项目' }
   }
   if (mode === 'orderType') {
-    return { label: ORDER_TYPE_MAP[key] || '其他类型', order: ['thesis', 'format', 'translation'].indexOf(key), description: '按业务类型归类' }
+    const orderIndex = ORDER_TYPE_ORDER.indexOf(key)
+    return { label: ORDER_TYPE_MAP[key] || '其他类型', order: orderIndex === -1 ? 999 : orderIndex, description: '按业务类型归类' }
   }
   return { label: '', order: 0, description: '' }
 }

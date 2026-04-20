@@ -379,8 +379,22 @@ const api = window.electronAPI
 const currentUser = inject('currentUser')
 const data = ref(null)
 
-const typeLabelMap = { thesis: '毕设论文', format: '格式修改', translation: '外文翻译' }
-const typeColorMap = { thesis: '#6366f1', format: '#0ea5e9', translation: '#f59e0b' }
+const typeLabelMap = {
+  thesis: '毕设论文',
+  format: '格式修改',
+  translation: '外文翻译',
+  design: '设计定制',
+  reduction: '论文降重',
+  special: '特殊订单',
+}
+const typeColorMap = {
+  thesis: '#6366f1',
+  format: '#0ea5e9',
+  translation: '#f59e0b',
+  design: '#8b5cf6',
+  reduction: '#10b981',
+  special: '#ef4444',
+}
 
 const timeMode = ref('all')
 const selectedYear = ref(new Date().getFullYear())
@@ -569,7 +583,7 @@ const typeChartOption = computed(() => {
   return {
     tooltip: { trigger: 'item', formatter: '{b}: {c} 单 ({d}%)' },
     legend: { bottom: 0, textStyle: { fontSize: 12 } },
-    color: ['#6366f1', '#0ea5e9', '#f59e0b'],
+    color: Object.values(typeColorMap),
     series: [{
       type: 'pie',
       radius: ['45%', '70%'],

@@ -79,6 +79,9 @@ const draftSubPathMap = {
   thesis: '论文文件/论文稿件/初稿',
   format: '修改后文件',
   translation: '交付文件',
+  design: '论文文件/论文稿件/初稿',
+  reduction: '修改后文件',
+  special: '修改后文件',
 }
 const draftFolderPath = computed(() => {
   if (!props.folderPath) return ''

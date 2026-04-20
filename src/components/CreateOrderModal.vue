@@ -132,6 +132,11 @@
               </el-select>
             </el-form-item>
           </el-col>
+          <el-col :span="8" v-if="form.orderType === 'special'">
+            <el-form-item label="服务项目">
+              <el-input v-model="form.specialService" placeholder="选填，例如：图例绘制 / PPT制作" />
+            </el-form-item>
+          </el-col>
           <el-col :span="8" v-if="form.orderType === 'translation'">
             <el-form-item label="是否有原文">
               <el-switch
@@ -147,7 +152,7 @@
         </el-row>
 
         <!-- Design type selectors (thesis + includesDesign) -->
-        <el-row v-if="form.orderType === 'thesis' && form.includesDesign" :gutter="12" style="margin-top: 4px">
+        <el-row v-if="showDesignFields" :gutter="12" style="margin-top: 4px">
           <el-col :span="8">
             <el-form-item label="设计类型">
               <el-select v-model="form.designType" placeholder="选择类型" style="width: 100%" @change="onDesignTypeChange">
@@ -225,6 +230,9 @@ const orderTypes = [
   { key: 'thesis', label: '毕设论文', desc: '含论文、设计、修改', color: '#6366f1' },
   { key: 'format', label: '格式修改', desc: '仅格式调整', color: '#0ea5e9' },
   { key: 'translation', label: '外文翻译', desc: '翻译任务', color: '#f59e0b' },
+  { key: 'design', label: '设计定制', desc: '程序/单片机/机械设计', color: '#8b5cf6' },
+  { key: 'reduction', label: '论文降重', desc: '降重与修改交付', color: '#10b981' },
+  { key: 'special', label: '特殊订单', desc: '图例/PPT等灵活项目', color: '#ef4444' },
 ]
 
 const graduationYearOptions = computed(() => {
@@ -234,10 +242,28 @@ const graduationYearOptions = computed(() => {
   return years
 })
 
-const titleLabel = computed(() => '论文题目')
+const showDesignFields = computed(() => form.value.orderType === 'design' || (form.value.orderType === 'thesis' && form.value.includesDesign))
+const titleLabel = computed(() => {
+  const map = {
+    thesis: '论文题目',
+    format: '项目题目',
+    translation: '论文题目',
+    design: '项目题目',
+    reduction: '论文题目',
+    special: '订单标题',
+  }
+  return map[form.value.orderType] || '项目题目'
+})
 const titlePlaceholder = computed(() => {
-  const map = { thesis: '输入毕设论文题目', format: '输入论文题目', translation: '输入论文题目' }
-  return map[form.value.orderType] || '输入论文题目'
+  const map = {
+    thesis: '输入毕设论文题目',
+    format: '输入项目题目',
+    translation: '输入论文题目',
+    design: '输入设计项目名称',
+    reduction: '输入论文题目',
+    special: '输入订单标题',
+  }
+  return map[form.value.orderType] || '输入项目题目'
 })
 
 const historyCache = ref({})
@@ -293,14 +319,21 @@ const defaultForm = () => ({
   title: '', university: '', college: '', major: '',
   studentName: '', wechatName: '', groupChatName: '',
   includesDesign: 0, designType: '', designSubType: '', designStatus: '',
-  formatMode: '', hasOriginalText: 0,
+  formatMode: '', hasOriginalText: 0, specialService: '',
   receiver: '', handler: '', advisor: '',
   deadline: '', totalAmount: undefined, paidAmount: undefined, dispatchAmount: undefined,
   graduationYear: getCurrentGraduationYear(),
 })
 const form = ref(defaultForm())
 
-const typeSubDirMap = { thesis: '毕业设计', format: '格式修改', translation: '外文翻译' }
+const typeSubDirMap = {
+  thesis: '毕业设计',
+  format: '格式修改',
+  translation: '外文翻译',
+  design: '毕业设计',
+  reduction: '论文降重',
+  special: '特殊订单',
+}
 const folderPreview = computed(() => {
   const year = new Date().getFullYear()
   const uni = form.value.university || '学校名称'
@@ -329,6 +362,7 @@ watch(() => props.visible, (val) => {
         designStatus: props.order.designStatus || '',
         formatMode: props.order.formatMode || '',
         hasOriginalText: props.order.hasOriginalText || 0,
+        specialService: props.order.specialService || '',
         receiver: props.order.receiver === '本人' ? '' : (props.order.receiver || ''),
         handler: props.order.handler === '本人' ? '' : (props.order.handler || ''),
         advisor: props.order.advisor || '',
@@ -361,12 +395,13 @@ async function handleSave() {
       studentName: form.value.studentName || '',
       wechatName: form.value.wechatName || '',
       groupChatName: form.value.groupChatName || '',
-      includesDesign: form.value.orderType === 'thesis' ? (form.value.includesDesign ? 1 : 0) : 0,
-      designType: form.value.orderType === 'thesis' && form.value.includesDesign ? (form.value.designType || '') : '',
-      designSubType: form.value.orderType === 'thesis' && form.value.includesDesign ? (form.value.designSubType || '') : '',
-      designStatus: form.value.orderType === 'thesis' && form.value.includesDesign ? (form.value.designStatus || '') : '',
+      includesDesign: form.value.orderType === 'design' ? 1 : (form.value.orderType === 'thesis' ? (form.value.includesDesign ? 1 : 0) : 0),
+      designType: showDesignFields.value ? (form.value.designType || '') : '',
+      designSubType: showDesignFields.value ? (form.value.designSubType || '') : '',
+      designStatus: showDesignFields.value ? (form.value.designStatus || '') : '',
       formatMode: form.value.orderType === 'format' ? (form.value.formatMode || '') : '',
       hasOriginalText: form.value.orderType === 'translation' ? (form.value.hasOriginalText ? 1 : 0) : 0,
+      specialService: form.value.orderType === 'special' ? (form.value.specialService || '') : '',
       receiver: form.value.receiver || '本人',
       handler: form.value.handler || '本人',
       advisor: form.value.advisor || '',
@@ -437,12 +472,12 @@ async function handleSave() {
 
 /* Type selector */
 .type-selector {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 20px;
 }
 .type-option {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -475,5 +510,11 @@ async function handleSave() {
 .type-desc {
   font-size: 11px;
   color: #94a3b8;
+}
+
+@media (max-width: 720px) {
+  .type-selector {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>
