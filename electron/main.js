@@ -1612,8 +1612,8 @@ function registerIpcHandlers() {
 
       const orderMap = new Map()
       const insertOrder = db.prepare(`
-        INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, groupChatName, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, isDraftSubmitted, refundAmount, isHandlerPaid, handlerPaidAmount, syncUuid)
-        VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @groupChatName, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, @isDesignFinished, @folderPath, @graduationYear, @createdAt, @isDraftSubmitted, @refundAmount, @isHandlerPaid, @handlerPaidAmount, @syncUuid)
+        INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, isDraftSubmitted, refundAmount, isHandlerPaid, handlerPaidAmount, syncUuid)
+        VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, @isDesignFinished, @folderPath, @graduationYear, @createdAt, @isDraftSubmitted, @refundAmount, @isHandlerPaid, @handlerPaidAmount, @syncUuid)
       `)
       for (const o of importedOrders) {
         const mappedPath = replacePathPrefix(oldRoot, normalizedNewRoot, o.folderPath || '')
@@ -1626,6 +1626,7 @@ function registerIpcHandlers() {
           studentName: o.studentName || '',
           wechatName: o.wechatName || '',
           groupChatName: o.groupChatName || '',
+          specialService: o.specialService || '',
           includesDesign: Number(o.includesDesign) || 0,
           designType: o.designType || '',
           designSubType: o.designSubType || '',

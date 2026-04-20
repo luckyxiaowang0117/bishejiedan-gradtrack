@@ -40,12 +40,21 @@
 
       <div class="type-seg">
         <button
-          v-for="t in typeFilters"
-          :key="t.key"
-          class="type-seg-btn"
-          :class="{ 'type-seg-active': typeFilter === t.key }"
-          @click="$emit('type-change', t.key)"
-        >{{ t.label }}</button>
+          class="type-seg-btn type-seg-btn-all"
+          :class="{ 'type-seg-active': typeFilter === allTypeFilter.key }"
+          :style="getTypeButtonStyle(allTypeFilter)"
+          @click="$emit('type-change', allTypeFilter.key)"
+        >{{ allTypeFilter.label }}</button>
+        <div class="type-seg-grid">
+          <button
+            v-for="t in businessTypeFilters"
+            :key="t.key"
+            class="type-seg-btn type-seg-btn-business"
+            :class="['type-key-' + t.key, { 'type-seg-active': typeFilter === t.key }]"
+            :style="getTypeButtonStyle(t)"
+            @click="$emit('type-change', t.key)"
+          >{{ t.label }}</button>
+        </div>
       </div>
 
       <div class="filter-body">
@@ -465,14 +474,17 @@ const filters = [
 ]
 
 const typeFilters = [
-  { key: 'all', label: '全部类型' },
-  { key: 'thesis', label: '毕设论文' },
-  { key: 'format', label: '格式修改' },
-  { key: 'translation', label: '外文翻译' },
-  { key: 'design', label: '设计定制' },
-  { key: 'reduction', label: '论文降重' },
-  { key: 'special', label: '特殊订单' },
+  { key: 'all', label: '全部类型', color: '#475569' },
+  { key: 'thesis', label: '毕设论文', color: '#6366f1' },
+  { key: 'format', label: '格式修改', color: '#0ea5e9' },
+  { key: 'translation', label: '外文翻译', color: '#f59e0b' },
+  { key: 'design', label: '设计定制', color: '#8b5cf6' },
+  { key: 'reduction', label: '论文降重', color: '#10b981' },
+  { key: 'special', label: '特殊订单', color: '#ef4444' },
 ]
+
+const allTypeFilter = typeFilters[0]
+const businessTypeFilters = typeFilters.slice(1)
 
 const orderTypeMap = {
   thesis: { label: '毕设论文', color: '#6366f1' },
@@ -481,6 +493,34 @@ const orderTypeMap = {
   design: { label: '设计定制', color: '#8b5cf6' },
   reduction: { label: '论文降重', color: '#10b981' },
   special: { label: '特殊订单', color: '#ef4444' },
+}
+
+function hexToRgba(hex, alpha) {
+  const normalized = (hex || '').replace('#', '')
+  if (normalized.length !== 6) return `rgba(148, 163, 184, ${alpha})`
+  const r = parseInt(normalized.slice(0, 2), 16)
+  const g = parseInt(normalized.slice(2, 4), 16)
+  const b = parseInt(normalized.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function getTypeButtonStyle(type) {
+  const isActive = props.typeFilter === type.key
+  const color = type.color || '#64748b'
+  if (isActive) {
+    return {
+      color: '#fff',
+      borderColor: color,
+      background: `linear-gradient(135deg, ${color} 0%, ${hexToRgba(color, 0.86)} 100%)`,
+      boxShadow: `0 10px 22px ${hexToRgba(color, 0.26)}`,
+    }
+  }
+  return {
+    color,
+    borderColor: hexToRgba(color, 0.18),
+    background: `linear-gradient(135deg, ${hexToRgba(color, 0.12)} 0%, ${hexToRgba(color, 0.04)} 100%)`,
+    boxShadow: 'none',
+  }
 }
 
 function isGroupExpanded(key) {
@@ -683,39 +723,53 @@ function getStatus(order) {
 
 .type-seg {
   display: flex;
-  padding: 10px 16px;
-  gap: 2px;
-  background: #f8fafc;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.type-seg-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .type-seg-btn {
-  flex: 1;
-  padding: 6px 0;
+  min-height: 36px;
+  padding: 8px 10px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 700;
   cursor: pointer;
-  border: none;
-  background: transparent;
-  color: #94a3b8;
-  border-radius: 6px;
-  transition: all 0.15s;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
   text-align: center;
+  white-space: nowrap;
 }
 
 .type-seg-btn:hover {
-  color: #64748b;
-  background: #e2e8f0;
+  transform: translateY(-1px);
 }
 
 .type-seg-active {
-  background: #fff;
-  color: #1e293b;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
 }
 
 .type-seg-active:hover {
-  background: #fff;
-  color: #1e293b;
+  transform: translateY(-1px);
+}
+
+.type-seg-btn-all,
+.type-seg-btn-business {
+  width: 100%;
+}
+
+@media (max-width: 520px) {
+  .type-seg-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .filter-body {
