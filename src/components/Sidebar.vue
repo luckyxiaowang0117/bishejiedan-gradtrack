@@ -333,11 +333,13 @@
     </div>
 
     <div class="sidebar-foot">
-      <div class="foot-row">
+      <div class="foot-row foot-row-primary">
         <el-button type="primary" size="large" class="create-btn" @click="$emit('create')">
           <el-icon><CirclePlusFilled /></el-icon>
           新建接单项目
         </el-button>
+      </div>
+      <div class="foot-row foot-row-secondary">
         <el-tooltip content="立即同步" placement="top">
           <el-button size="large" class="settings-btn sync-btn" :loading="syncBusy" @click="$emit('open-sync')">
             <el-icon :size="18"><RefreshRight /></el-icon>
@@ -724,8 +726,8 @@ function getStatus(order) {
 .type-seg {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px var(--gt-sidebar-section-px) 14px;
+  gap: 8px;
+  padding: 10px var(--gt-sidebar-section-px) 11px;
   background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
   border-bottom: 1px solid #e2e8f0;
 }
@@ -733,13 +735,13 @@ function getStatus(order) {
 .type-seg-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .type-seg-btn {
   min-height: var(--gt-filter-btn-height);
-  padding: 8px 10px;
-  font-size: 12px;
+  padding: 6px 8px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   border: 1px solid transparent;
@@ -918,12 +920,12 @@ function getStatus(order) {
 
 .status-row {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 5px;
 }
 
 .filter-pill {
-  padding: 4px 10px;
+  padding: 5px 10px;
   border-radius: 20px;
   font-size: 11px;
   white-space: nowrap;
@@ -1342,6 +1344,15 @@ function getStatus(order) {
   gap: 8px;
 }
 
+.foot-row + .foot-row {
+  margin-top: 8px;
+}
+
+.foot-row-secondary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .create-btn {
   flex: 1;
   border-radius: 8px;
@@ -1350,7 +1361,8 @@ function getStatus(order) {
 
 .settings-btn {
   border-radius: 8px !important;
-  padding: 0 12px !important;
+  width: 100% !important;
+  padding: 0 !important;
   color: #64748b !important;
   border-color: #e2e8f0 !important;
 }

@@ -9,7 +9,7 @@
   --gt-shell-bg: #f8fafc;
   --gt-drag-height: 44px;
   --gt-topbar-height: 56px;
-  --gt-sidebar-width: clamp(390px, 23vw, 500px);
+  --gt-sidebar-width: clamp(430px, 25vw, 540px);
   --gt-sidebar-head-px: 20px;
   --gt-sidebar-head-pb: 20px;
   --gt-sidebar-section-px: 16px;
@@ -32,7 +32,7 @@
   --gt-empty-title-size: 18px;
   --gt-empty-sub-size: 13px;
   --gt-dialog-sm: min(420px, calc(100vw - 24px));
-  --gt-dialog-md: min(560px, calc(100vw - 24px));
+  --gt-dialog-md: min(900px, calc(100vw - 24px));
   --gt-dialog-lg: min(600px, calc(100vw - 24px));
   --gt-dialog-xl: min(760px, calc(100vw - 24px));
 }
@@ -42,7 +42,7 @@
     --gt-base-font-size: 13px;
     --gt-drag-height: 40px;
     --gt-topbar-height: 52px;
-    --gt-sidebar-width: clamp(350px, 22vw, 440px);
+    --gt-sidebar-width: clamp(390px, 24vw, 480px);
     --gt-sidebar-head-px: 18px;
     --gt-sidebar-head-pb: 16px;
     --gt-sidebar-section-px: 14px;
@@ -58,13 +58,13 @@
     --gt-title-md: 15px;
     --gt-text-sm: 12px;
     --gt-text-xs: 11px;
-    --gt-filter-btn-height: 34px;
+    --gt-filter-btn-height: 32px;
     --gt-order-card-py: 12px;
     --gt-order-card-px: 14px;
     --gt-empty-icon-box: 84px;
     --gt-empty-title-size: 17px;
     --gt-empty-sub-size: 12px;
-    --gt-dialog-md: min(520px, calc(100vw - 24px));
+    --gt-dialog-md: min(820px, calc(100vw - 24px));
     --gt-dialog-lg: min(560px, calc(100vw - 24px));
     --gt-dialog-xl: min(720px, calc(100vw - 24px));
   }
@@ -75,7 +75,7 @@
     --gt-base-font-size: 13px;
     --gt-drag-height: 36px;
     --gt-topbar-height: 48px;
-    --gt-sidebar-width: clamp(320px, 21vw, 380px);
+    --gt-sidebar-width: clamp(360px, 23vw, 420px);
     --gt-sidebar-head-px: 16px;
     --gt-sidebar-head-pb: 14px;
     --gt-sidebar-section-px: 12px;
@@ -91,14 +91,14 @@
     --gt-title-md: 14px;
     --gt-text-sm: 12px;
     --gt-text-xs: 11px;
-    --gt-filter-btn-height: 32px;
+    --gt-filter-btn-height: 30px;
     --gt-order-card-py: 10px;
     --gt-order-card-px: 12px;
     --gt-empty-icon-box: 72px;
     --gt-empty-title-size: 16px;
     --gt-empty-sub-size: 12px;
     --gt-dialog-sm: min(400px, calc(100vw - 20px));
-    --gt-dialog-md: min(500px, calc(100vw - 20px));
+    --gt-dialog-md: min(760px, calc(100vw - 20px));
     --gt-dialog-lg: min(540px, calc(100vw - 20px));
     --gt-dialog-xl: min(660px, calc(100vw - 20px));
   }

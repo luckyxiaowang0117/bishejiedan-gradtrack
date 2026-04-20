@@ -1,12 +1,11 @@
 <template>
   <el-dialog
-    :model-value="visible"
-    @update:model-value="$emit('update:visible', $event)"
+    v-model="dialogVisible"
     title="设置"
     width="var(--gt-dialog-lg)"
     :close-on-click-modal="false"
     :destroy-on-close="false"
-    :before-close="handleClose"
+    :before-close="beforeDialogClose"
     top="5vh"
   >
     <div class="settings-body">
@@ -213,7 +212,7 @@
     </div>
 
     <template #footer>
-      <el-button type="primary" @click="handleClose">完成</el-button>
+      <el-button type="primary" @click="handleFinish">完成</el-button>
     </template>
   </el-dialog>
 
@@ -279,6 +278,10 @@ const syncOverview = ref({
 
 const pwdForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const pwdLoading = ref(false)
+const dialogVisible = computed({
+  get: () => props.visible,
+  set: (value) => emit('update:visible', value),
+})
 
 const formattedLastSyncAt = computed(() => {
   const value = syncOverview.value?.lastSyncAt
@@ -352,7 +355,7 @@ async function handleAutoLaunchChange(val) {
   ElMessage.success(val ? '已开启开机自启动' : '已关闭开机自启动')
 }
 
-async function handleClose(done) {
+async function persistPendingChanges() {
   // 1. 收集所有正在编辑但未确认的输入
   for (const dt of designTypes.value) {
     if (dt._adding) {
@@ -384,8 +387,16 @@ async function handleClose(done) {
   }
   // 3. 重新从数据库加载，验证持久化成功
   await loadData()
-  if (typeof done === 'function') done()
-  else emit('update:visible', false)
+}
+
+async function beforeDialogClose(done) {
+  await persistPendingChanges()
+  done()
+}
+
+async function handleFinish() {
+  await persistPendingChanges()
+  emit('update:visible', false)
 }
 
 async function handleReset() {

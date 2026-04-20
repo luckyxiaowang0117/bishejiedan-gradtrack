@@ -1,7 +1,6 @@
 <template>
   <el-dialog
-    :model-value="visible"
-    @update:model-value="$emit('update:visible', $event)"
+    v-model="dialogVisible"
     :title="isEditing ? '编辑订单信息' : '新建接单项目'"
     width="var(--gt-dialog-md)"
     :close-on-click-modal="false"
@@ -9,196 +8,164 @@
     top="5vh"
     class="order-dialog"
   >
-    <el-form :model="form" label-position="top" size="default">
+    <el-form :model="form" label-position="top" size="default" class="order-form">
+      <div class="form-layout">
+        <section class="form-column form-column-left">
+          <div v-if="!isEditing" class="column-card type-card">
+            <div class="column-title">订单类型</div>
+            <div class="type-selector">
+              <button
+                v-for="t in orderTypes"
+                :key="t.key"
+                class="type-option"
+                :class="{ active: form.orderType === t.key }"
+                :style="form.orderType === t.key ? { borderColor: t.color, background: t.color + '0a' } : {}"
+                @click="form.orderType = t.key"
+                type="button"
+              >
+                <span class="type-dot" :style="{ background: form.orderType === t.key ? t.color : '#cbd5e1' }" />
+                <span class="type-label">{{ t.label }}</span>
+                <span class="type-desc">{{ t.desc }}</span>
+              </button>
+            </div>
+          </div>
 
-      <!-- Order Type Selector (only when creating) -->
-      <div v-if="!isEditing" class="type-selector">
-        <button
-          v-for="t in orderTypes"
-          :key="t.key"
-          class="type-option"
-          :class="{ active: form.orderType === t.key }"
-          :style="form.orderType === t.key ? { borderColor: t.color, background: t.color + '0a' } : {}"
-          @click="form.orderType = t.key"
-          type="button"
-        >
-          <span class="type-dot" :style="{ background: form.orderType === t.key ? t.color : '#cbd5e1' }" />
-          <span class="type-label">{{ t.label }}</span>
-          <span class="type-desc">{{ t.desc }}</span>
-        </button>
-      </div>
+          <div class="column-card">
+            <div class="column-title">项目信息</div>
+            <el-form-item :label="titleLabel + ' *'">
+              <el-input v-model="form.title" :placeholder="titlePlaceholder" />
+            </el-form-item>
 
-      <el-form-item :label="titleLabel + ' *'">
-        <el-input v-model="form.title" :placeholder="titlePlaceholder" />
-      </el-form-item>
+            <div class="form-grid form-grid-3">
+              <el-form-item label="学校名称 *">
+                <el-autocomplete v-model="form.university" :fetch-suggestions="(q, cb) => fetchSuggestions('university', q, cb)" placeholder="例: 华南理工大学" style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="学院">
+                <el-autocomplete v-model="form.college" :fetch-suggestions="(q, cb) => fetchSuggestions('college', q, cb)" placeholder="例: 机械工程学院" style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="专业">
+                <el-autocomplete v-model="form.major" :fetch-suggestions="(q, cb) => fetchSuggestions('major', q, cb)" placeholder="例: 机械电子工程" style="width: 100%" />
+              </el-form-item>
+            </div>
 
-      <!-- School / College / Major -->
-      <div class="form-section-divider">
-        <el-row :gutter="12">
-          <el-col :span="8">
-            <el-form-item label="学校名称 *">
-              <el-autocomplete v-model="form.university" :fetch-suggestions="(q, cb) => fetchSuggestions('university', q, cb)" placeholder="例: 华南理工大学" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="学院">
-              <el-autocomplete v-model="form.college" :fetch-suggestions="(q, cb) => fetchSuggestions('college', q, cb)" placeholder="例: 机械工程学院" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="专业">
-              <el-autocomplete v-model="form.major" :fetch-suggestions="(q, cb) => fetchSuggestions('major', q, cb)" placeholder="例: 机械电子工程" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </div>
+            <div class="form-grid form-grid-3">
+              <el-form-item label="学生姓名">
+                <el-input v-model="form.studentName" placeholder="选填" />
+              </el-form-item>
+              <el-form-item label="微信昵称">
+                <el-input v-model="form.wechatName" placeholder="选填" />
+              </el-form-item>
+              <el-form-item label="群聊名称">
+                <el-input v-model="form.groupChatName" placeholder="选填" />
+              </el-form-item>
+            </div>
 
-      <!-- Student info -->
-      <el-row :gutter="12">
-        <el-col :span="8">
-          <el-form-item label="学生姓名">
-            <el-input v-model="form.studentName" placeholder="选填" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="微信昵称">
-            <el-input v-model="form.wechatName" placeholder="选填" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="群聊名称">
-            <el-input v-model="form.groupChatName" placeholder="选填" />
-          </el-form-item>
-        </el-col>
-      </el-row>
+            <div class="form-grid form-grid-3">
+              <el-form-item label="接单人">
+                <el-autocomplete v-model="form.receiver" :fetch-suggestions="(q, cb) => fetchSuggestions('receiver', q, cb)" placeholder="本人" style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="处理人">
+                <el-autocomplete v-model="form.handler" :fetch-suggestions="(q, cb) => fetchSuggestions('handler', q, cb)" placeholder="本人" style="width: 100%" />
+              </el-form-item>
+              <el-form-item v-if="form.orderType === 'thesis'" label="指导教师">
+                <el-autocomplete v-model="form.advisor" :fetch-suggestions="(q, cb) => fetchSuggestions('advisor', q, cb)" placeholder="教师姓名" style="width: 100%" />
+              </el-form-item>
+            </div>
+          </div>
+        </section>
 
-      <el-row :gutter="12">
-        <el-col :span="8">
-          <el-form-item label="接单人">
-            <el-autocomplete v-model="form.receiver" :fetch-suggestions="(q, cb) => fetchSuggestions('receiver', q, cb)" placeholder="本人" style="width: 100%" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="处理人">
-            <el-autocomplete v-model="form.handler" :fetch-suggestions="(q, cb) => fetchSuggestions('handler', q, cb)" placeholder="本人" style="width: 100%" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8" v-if="form.orderType === 'thesis'">
-          <el-form-item label="指导教师">
-            <el-autocomplete v-model="form.advisor" :fetch-suggestions="(q, cb) => fetchSuggestions('advisor', q, cb)" placeholder="教师姓名" style="width: 100%" />
-          </el-form-item>
-        </el-col>
-      </el-row>
+        <section class="form-column form-column-right">
+          <div class="column-card">
+            <div class="column-title">交付与属性</div>
+            <div class="form-grid form-grid-2">
+              <el-form-item label="交稿日期 *">
+                <el-date-picker
+                  v-model="form.deadline"
+                  type="date"
+                  placeholder="选择日期"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
+                  style="width: 100%"
+                />
+              </el-form-item>
+              <el-form-item label="毕业届">
+                <el-select v-model="form.graduationYear" placeholder="选择毕业届" filterable allow-create style="width: 100%">
+                  <el-option v-for="y in graduationYearOptions" :key="y" :label="y + '届'" :value="y" />
+                </el-select>
+              </el-form-item>
+            </div>
 
-      <!-- Deadline + Graduation Year + Design (thesis) -->
-      <div class="form-section-divider">
-        <el-row :gutter="12">
-          <el-col :span="8">
-            <el-form-item label="交稿日期 *">
-              <el-date-picker
-                v-model="form.deadline"
-                type="date"
-                placeholder="选择日期"
-                format="YYYY-MM-DD"
-                value-format="YYYY-MM-DD"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="毕业届">
-              <el-select v-model="form.graduationYear" placeholder="选择毕业届" filterable allow-create style="width: 100%">
-                <el-option v-for="y in graduationYearOptions" :key="y" :label="y + '届'" :value="y" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8" v-if="form.orderType === 'thesis'">
-            <el-form-item label="是否包含设计">
-              <el-switch
-                v-model="form.includesDesign"
-                active-text="包含"
-                inactive-text="不含"
-                :active-value="1"
-                :inactive-value="0"
-                style="margin-top: 4px"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8" v-if="form.orderType === 'format'">
-            <el-form-item label="服务类型">
-              <el-select v-model="form.formatMode" placeholder="选择类型" style="width: 100%">
-                <el-option label="全包" value="full" />
-                <el-option label="单次" value="single" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8" v-if="form.orderType === 'special'">
-            <el-form-item label="服务项目">
-              <el-input v-model="form.specialService" placeholder="选填，例如：图例绘制 / PPT制作" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8" v-if="form.orderType === 'translation'">
-            <el-form-item label="是否有原文">
-              <el-switch
-                v-model="form.hasOriginalText"
-                active-text="有"
-                inactive-text="无"
-                :active-value="1"
-                :inactive-value="0"
-                style="margin-top: 4px"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
+            <div class="form-grid form-grid-2">
+              <el-form-item v-if="form.orderType === 'thesis'" label="是否包含设计">
+                <el-switch
+                  v-model="form.includesDesign"
+                  active-text="包含"
+                  inactive-text="不含"
+                  :active-value="1"
+                  :inactive-value="0"
+                  style="margin-top: 4px"
+                />
+              </el-form-item>
+              <el-form-item v-if="form.orderType === 'format'" label="服务类型">
+                <el-select v-model="form.formatMode" placeholder="选择类型" style="width: 100%">
+                  <el-option label="全包" value="full" />
+                  <el-option label="单次" value="single" />
+                </el-select>
+              </el-form-item>
+              <el-form-item v-if="form.orderType === 'special'" label="服务项目">
+                <el-input v-model="form.specialService" placeholder="选填，例如：图例绘制 / PPT制作" />
+              </el-form-item>
+              <el-form-item v-if="form.orderType === 'translation'" label="是否有原文">
+                <el-switch
+                  v-model="form.hasOriginalText"
+                  active-text="有"
+                  inactive-text="无"
+                  :active-value="1"
+                  :inactive-value="0"
+                  style="margin-top: 4px"
+                />
+              </el-form-item>
+            </div>
 
-        <!-- Design type selectors (thesis + includesDesign) -->
-        <el-row v-if="showDesignFields" :gutter="12" style="margin-top: 4px">
-          <el-col :span="8">
-            <el-form-item label="设计类型">
-              <el-select v-model="form.designType" placeholder="选择类型" style="width: 100%" @change="onDesignTypeChange">
-                <el-option v-for="t in designTypeDefs" :key="t.id" :label="t.typeName" :value="t.typeName" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8" v-if="currentSubTypes.length > 0">
-            <el-form-item label="来源/子类型">
-              <el-select v-model="form.designSubType" placeholder="选择来源" style="width: 100%" @change="onDesignSubTypeChange">
-                <el-option v-for="s in currentSubTypes" :key="s.name" :label="s.name" :value="s.name" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8" v-if="currentStatuses.length > 0">
-            <el-form-item label="当前状态">
-              <el-select v-model="form.designStatus" placeholder="选择状态" style="width: 100%">
-                <el-option v-for="s in currentStatuses" :key="s" :label="s" :value="s" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </div>
+            <div v-if="showDesignFields" class="form-grid form-grid-3">
+              <el-form-item label="设计类型">
+                <el-select v-model="form.designType" placeholder="选择类型" style="width: 100%" @change="onDesignTypeChange">
+                  <el-option v-for="t in designTypeDefs" :key="t.id" :label="t.typeName" :value="t.typeName" />
+                </el-select>
+              </el-form-item>
+              <el-form-item v-if="currentSubTypes.length > 0" label="来源/子类型">
+                <el-select v-model="form.designSubType" placeholder="选择来源" style="width: 100%" @change="onDesignSubTypeChange">
+                  <el-option v-for="s in currentSubTypes" :key="s.name" :label="s.name" :value="s.name" />
+                </el-select>
+              </el-form-item>
+              <el-form-item v-if="currentStatuses.length > 0" label="当前状态">
+                <el-select v-model="form.designStatus" placeholder="选择状态" style="width: 100%">
+                  <el-option v-for="s in currentStatuses" :key="s" :label="s" :value="s" />
+                </el-select>
+              </el-form-item>
+            </div>
+          </div>
 
-      <div class="form-section-divider">
-        <el-row :gutter="12">
-          <el-col :span="8">
-            <el-form-item label="全款金额 (元)">
-              <el-input-number v-model="form.totalAmount" :min="0" :precision="0" :step="100" controls-position="right" placeholder="全款金额" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="已收金额 (定金)">
-              <el-input-number v-model="form.paidAmount" :min="0" :precision="0" :step="100" controls-position="right" placeholder="已收金额" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="派单金额 (元)">
-              <el-input-number v-model="form.dispatchAmount" :min="0" :precision="0" :step="100" controls-position="right" placeholder="支付给处理人" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-        </el-row>
+          <div class="column-card">
+            <div class="column-title">金额信息</div>
+            <div class="form-grid form-grid-3">
+              <el-form-item label="全款金额 (元)">
+                <el-input-number v-model="form.totalAmount" :min="0" :precision="0" :step="100" controls-position="right" placeholder="全款金额" style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="已收金额 (定金)">
+                <el-input-number v-model="form.paidAmount" :min="0" :precision="0" :step="100" controls-position="right" placeholder="已收金额" style="width: 100%" />
+              </el-form-item>
+              <el-form-item label="派单金额 (元)">
+                <el-input-number v-model="form.dispatchAmount" :min="0" :precision="0" :step="100" controls-position="right" placeholder="支付给处理人" style="width: 100%" />
+              </el-form-item>
+            </div>
+          </div>
+        </section>
       </div>
 
       <el-alert
         v-if="!isEditing"
+        class="folder-alert"
         :title="`保存后将在根目录下创建文件夹: ${folderPreview}`"
         type="info"
         show-icon
@@ -207,7 +174,7 @@
     </el-form>
 
     <template #footer>
-      <el-button @click="$emit('update:visible', false)">取消</el-button>
+      <el-button @click="closeDialog()">取消</el-button>
       <el-button type="primary" @click="handleSave" :loading="saving">
         {{ isEditing ? '保存修改' : '创建项目并建档' }}
       </el-button>
@@ -225,6 +192,10 @@ const api = window.electronAPI
 const currentUser = inject('currentUser')
 const saving = ref(false)
 const isEditing = computed(() => !!props.order)
+const dialogVisible = computed({
+  get: () => props.visible,
+  set: (value) => emit('update:visible', value),
+})
 
 const orderTypes = [
   { key: 'thesis', label: '毕设论文', desc: '含论文、设计、修改', color: '#6366f1' },
@@ -378,6 +349,10 @@ watch(() => props.visible, (val) => {
   }
 })
 
+function closeDialog() {
+  emit('update:visible', false)
+}
+
 async function handleSave() {
   if (!form.value.title.trim()) return ElMessage.warning('请填写项目题目')
   if (!form.value.deadline) return ElMessage.warning('请选择交稿日期')
@@ -436,6 +411,7 @@ async function handleSave() {
       }
     }
     ElMessage.success(isEditing.value ? '已保存' : '项目已创建')
+    closeDialog()
     emit('saved')
   } catch (err) {
     ElMessage.error('保存失败: ' + (err.message || '未知错误'))
@@ -447,13 +423,6 @@ async function handleSave() {
 </script>
 
 <style scoped>
-.form-section-divider {
-  border-top: 1px solid #f1f5f9;
-  padding-top: 16px;
-  margin-top: 4px;
-  margin-bottom: 4px;
-}
-
 :deep(.el-form-item__label) {
   font-size: 12px;
   font-weight: 500;
@@ -470,12 +439,65 @@ async function handleSave() {
   border-top: 1px solid #f1f5f9;
 }
 
+.order-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.form-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.column-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  padding: 14px;
+}
+
+.column-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 12px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.form-grid :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.form-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.folder-alert {
+  margin-top: 2px;
+}
+
 /* Type selector */
 .type-selector {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 8px;
 }
 .type-option {
   display: flex;
@@ -512,9 +534,20 @@ async function handleSave() {
   color: #94a3b8;
 }
 
+@media (max-width: 980px) {
+  .form-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 720px) {
   .type-selector {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .form-grid-2,
+  .form-grid-3 {
+    grid-template-columns: 1fr;
   }
 }
 </style>
