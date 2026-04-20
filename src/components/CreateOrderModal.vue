@@ -3,9 +3,9 @@
     v-model="dialogVisible"
     :title="isEditing ? '编辑订单信息' : '新建接单项目'"
     width="var(--gt-dialog-md)"
+    align-center
     :close-on-click-modal="false"
     destroy-on-close
-    top="5vh"
     class="order-dialog"
   >
     <el-form :model="form" label-position="top" size="default" class="order-form">
@@ -434,6 +434,17 @@ async function handleSave() {
   border-bottom: 1px solid #f1f5f9;
   padding: 16px 24px;
 }
+
+.order-dialog :deep(.el-dialog) {
+  margin: 0 !important;
+}
+
+.order-dialog :deep(.el-dialog__body) {
+  max-height: min(74vh, 760px);
+  overflow: auto;
+  padding: 18px 24px;
+}
+
 .order-dialog :deep(.el-dialog__footer) {
   background: #f8fafc;
   border-top: 1px solid #f1f5f9;

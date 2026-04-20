@@ -3,10 +3,11 @@
     v-model="dialogVisible"
     title="设置"
     width="var(--gt-dialog-lg)"
+    align-center
     :close-on-click-modal="false"
     :destroy-on-close="false"
     :before-close="beforeDialogClose"
-    top="5vh"
+    class="settings-dialog"
   >
     <div class="settings-body">
       <!-- Section 1: Root Directory -->
@@ -220,8 +221,9 @@
     v-model="missingFolderDialogVisible"
     title="导入完成（部分路径缺失）"
     width="var(--gt-dialog-xl)"
+    align-center
     :close-on-click-modal="false"
-    top="8vh"
+    class="missing-folder-dialog"
   >
     <div class="missing-dialog-body">
       <el-alert
@@ -799,6 +801,21 @@ function convertToSubTypes(dt) {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.settings-dialog :deep(.el-dialog),
+.missing-folder-dialog :deep(.el-dialog) {
+  margin: 0 !important;
+}
+
+.settings-dialog :deep(.el-dialog__body) {
+  max-height: min(78vh, 760px);
+  overflow: auto;
+}
+
+.missing-folder-dialog :deep(.el-dialog__body) {
+  max-height: min(72vh, 640px);
+  overflow: auto;
 }
 
 .missing-dialog-body {

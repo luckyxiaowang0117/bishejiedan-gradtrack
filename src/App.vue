@@ -6,7 +6,7 @@
     @logged-in="onLoggedIn"
   />
 
-  <div v-else class="app-layout">
+  <div v-else class="app-layout" :style="appLayoutStyle">
     <Sidebar
       :app-version="appVersion"
       :order-groups="groupedOrders"
@@ -49,6 +49,14 @@
       @open-settings="showSettings = true"
       @open-stats="showStats = true"
       @logout="handleLogout"
+    />
+
+    <div
+      class="sidebar-resizer"
+      :class="{ 'sidebar-resizer-active': isResizingSidebar }"
+      title="拖拽调整左侧区域宽度"
+      @mousedown="startSidebarResize"
+      @dblclick="resetSidebarWidth"
     />
 
     <main class="main-panel">
@@ -159,15 +167,20 @@ onMounted(async () => {
   isWindows.value = platform === 'win32'
   document.addEventListener('dragover', preventDefaults)
   document.addEventListener('drop', preventDefaults)
+  window.addEventListener('resize', handleWindowResize)
   refreshTimer = setInterval(() => {
     if (isLoggedIn.value) loadOrders()
   }, 60000)
+  await loadSidebarWidthPreference()
   await checkAuth()
 })
 
 onUnmounted(() => {
   document.removeEventListener('dragover', preventDefaults)
   document.removeEventListener('drop', preventDefaults)
+  window.removeEventListener('resize', handleWindowResize)
+  if (removeSidebarResizeListeners) removeSidebarResizeListeners()
+  clearResizeInteractionStyles()
   if (refreshTimer) clearInterval(refreshTimer)
 })
 
@@ -201,8 +214,93 @@ const showStats = ref(false)
 const syncBusy = ref(false)
 const prefsReady = ref(false)
 const isHydratingListState = ref(false)
+const sidebarWidth = ref(null)
+const isResizingSidebar = ref(false)
+let removeSidebarResizeListeners = null
 
 const isUnpaid = (o) => o.totalAmount > o.paidAmount
+
+const appLayoutStyle = computed(() => (
+  sidebarWidth.value ? { '--gt-sidebar-width': `${sidebarWidth.value}px` } : {}
+))
+
+function getSidebarWidthBounds() {
+  const compactScreen = window.innerWidth <= 1680 || window.innerHeight <= 940
+  const mediumScreen = window.innerWidth <= 2200 || window.innerHeight <= 1180
+  const min = compactScreen ? 360 : (mediumScreen ? 390 : 430)
+  const max = Math.max(min + 80, Math.min(Math.floor(window.innerWidth * 0.42), 720))
+  return { min, max }
+}
+
+function clampSidebarWidth(width) {
+  const { min, max } = getSidebarWidthBounds()
+  return Math.min(Math.max(Math.round(Number(width) || min), min), max)
+}
+
+async function loadSidebarWidthPreference() {
+  const raw = await api.getSetting('sidebarWidth')
+  const parsed = Number(raw)
+  if (Number.isFinite(parsed) && parsed > 0) {
+    sidebarWidth.value = clampSidebarWidth(parsed)
+  } else {
+    sidebarWidth.value = null
+  }
+}
+
+async function persistSidebarWidth(width) {
+  await api.setSetting('sidebarWidth', String(clampSidebarWidth(width)))
+}
+
+function clearResizeInteractionStyles() {
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
+
+function bindSidebarResizeListeners(onMove, onUp) {
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+  removeSidebarResizeListeners = () => {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    removeSidebarResizeListeners = null
+  }
+}
+
+function startSidebarResize(event) {
+  event.preventDefault()
+  const sidebarElement = event.currentTarget?.previousElementSibling
+  const measuredWidth = sidebarElement?.getBoundingClientRect?.().width
+  const currentWidth = sidebarWidth.value ?? clampSidebarWidth(measuredWidth || getSidebarWidthBounds().min)
+  const startX = event.clientX
+  const startWidth = currentWidth
+  isResizingSidebar.value = true
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+
+  const onMove = (moveEvent) => {
+    const nextWidth = clampSidebarWidth(startWidth + (moveEvent.clientX - startX))
+    sidebarWidth.value = nextWidth
+  }
+
+  const onUp = async () => {
+    if (removeSidebarResizeListeners) removeSidebarResizeListeners()
+    isResizingSidebar.value = false
+    clearResizeInteractionStyles()
+    if (sidebarWidth.value) await persistSidebarWidth(sidebarWidth.value)
+  }
+
+  bindSidebarResizeListeners(onMove, onUp)
+}
+
+async function resetSidebarWidth() {
+  sidebarWidth.value = null
+  await api.setSetting('sidebarWidth', '')
+}
+
+function handleWindowResize() {
+  if (!sidebarWidth.value) return
+  sidebarWidth.value = clampSidebarWidth(sidebarWidth.value)
+}
 
 function getOrderUrgencyKey(order) {
   const now = new Date()
@@ -623,6 +721,32 @@ watch([filter, sortMode, groupMode], () => {
   display: flex;
   height: 100vh;
   background: var(--gt-shell-bg);
+}
+
+.sidebar-resizer {
+  width: 10px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.sidebar-resizer::before {
+  content: '';
+  width: 3px;
+  height: calc(100% - 28px);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sidebar-resizer:hover::before,
+.sidebar-resizer-active::before {
+  background: rgba(99, 102, 241, 0.42);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
 .main-panel {
