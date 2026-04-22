@@ -331,17 +331,50 @@
 
           <!-- Unsettled Orders -->
           <div v-if="receiverUnsettledOrders.length > 0" class="receiver-unsettled">
-            <h4 class="sub-section-title">未结算订单明细 ({{ receiverUnsettledOrders.length }})</h4>
-            <div class="week-orders">
-              <div class="week-order-header receiver-unsettled-5col">
-                <span>订单名称</span><span>类型</span><span>处理人</span><span>派单金额</span><span>未结金额</span>
+            <div class="receiver-unsettled-head">
+              <h4 class="sub-section-title">未结算订单明细 ({{ filteredReceiverUnsettledOrders.length }})</h4>
+              <el-select
+                v-model="receiverUnsettledTypeFilter"
+                placeholder="全部类型"
+                size="small"
+                class="receiver-unsettled-type-filter"
+              >
+                <el-option label="全部类型" value="all" />
+                <el-option
+                  v-for="item in receiverUnsettledTypeOptions"
+                  :key="item"
+                  :label="typeLabelMap[item] || item"
+                  :value="item"
+                />
+              </el-select>
+            </div>
+
+            <div class="receiver-unsettled-summary">
+              <div class="receiver-unsettled-summary-card">
+                <span class="receiver-unsettled-summary-label">总金额</span>
+                <strong class="receiver-unsettled-summary-value">¥{{ fmt(receiverUnsettledSummary.totalAmount) }}</strong>
               </div>
-              <div v-for="o in receiverUnsettledOrders" :key="o.id" class="week-order-row receiver-unsettled-5col" @click="$emit('navigate-order', o.id)">
+              <div class="receiver-unsettled-summary-card">
+                <span class="receiver-unsettled-summary-label">已付金额</span>
+                <strong class="receiver-unsettled-summary-value text-green">¥{{ fmt(receiverUnsettledSummary.paidAmount) }}</strong>
+              </div>
+              <div class="receiver-unsettled-summary-card">
+                <span class="receiver-unsettled-summary-label">未结金额</span>
+                <strong class="receiver-unsettled-summary-value text-red">¥{{ fmt(receiverUnsettledSummary.unpaidAmount) }}</strong>
+              </div>
+            </div>
+
+            <div class="week-orders">
+              <div class="week-order-header receiver-unsettled-6col">
+                <span>订单名称</span><span>类型</span><span>处理人</span><span>总金额</span><span>已付金额</span><span>未结金额</span>
+              </div>
+              <div v-for="o in filteredReceiverUnsettledOrders" :key="o.id" class="week-order-row receiver-unsettled-6col" @click="$emit('navigate-order', o.id)">
                 <span class="week-order-title">{{ o.title }}</span>
                 <span :style="{ color: typeColorMap[o.orderType] }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
                 <span>{{ o.handler || '本人' }}</span>
-                <span>¥{{ fmt(o.dispatchAmount) }}</span>
-                <span class="text-red">¥{{ fmt(o.dispatchAmount - (o.handlerPaidAmount || 0)) }}</span>
+                <span>¥{{ fmt(o.totalAmount) }}</span>
+                <span class="text-green">¥{{ fmt(o.paidAmount) }}</span>
+                <span class="text-red">¥{{ fmt((o.totalAmount || 0) - (o.paidAmount || 0)) }}</span>
               </div>
             </div>
           </div>
@@ -530,6 +563,7 @@ async function changeWeek(dir) {
 // --- Receiver Detail ---
 const selectedReceiver = ref('')
 const receiverData = ref(null)
+const receiverUnsettledTypeFilter = ref('all')
 
 const receiverList = computed(() => {
   if (!data.value) return []
@@ -538,11 +572,37 @@ const receiverList = computed(() => {
 
 const receiverUnsettledOrders = computed(() => {
   if (!receiverData.value) return []
-  return (receiverData.value.allOrders || []).filter(o => o.dispatchAmount > 0 && (o.handlerPaidAmount || 0) < o.dispatchAmount)
+  return (receiverData.value.allOrders || []).filter(o => (o.totalAmount || 0) > 0 && (o.paidAmount || 0) < (o.totalAmount || 0))
+})
+
+const receiverUnsettledTypeOptions = computed(() => {
+  const set = new Set(receiverUnsettledOrders.value.map(o => o.orderType || 'thesis'))
+  return Array.from(set).sort((a, b) => (typeLabelMap[a] || a).localeCompare(typeLabelMap[b] || b, 'zh-CN'))
+})
+
+const filteredReceiverUnsettledOrders = computed(() => {
+  if (receiverUnsettledTypeFilter.value === 'all') return receiverUnsettledOrders.value
+  return receiverUnsettledOrders.value.filter(o => (o.orderType || 'thesis') === receiverUnsettledTypeFilter.value)
+})
+
+const receiverUnsettledSummary = computed(() => {
+  return filteredReceiverUnsettledOrders.value.reduce((summary, order) => {
+    const totalAmount = Number(order.totalAmount) || 0
+    const paidAmount = Number(order.paidAmount) || 0
+    summary.totalAmount += totalAmount
+    summary.paidAmount += paidAmount
+    summary.unpaidAmount += Math.max(totalAmount - paidAmount, 0)
+    return summary
+  }, { totalAmount: 0, paidAmount: 0, unpaidAmount: 0 })
 })
 
 async function loadReceiverDetail() {
-  if (!selectedReceiver.value || !currentUser.value || !currentUser.value.id) { receiverData.value = null; return }
+  if (!selectedReceiver.value || !currentUser.value || !currentUser.value.id) {
+    receiverData.value = null
+    receiverUnsettledTypeFilter.value = 'all'
+    return
+  }
+  receiverUnsettledTypeFilter.value = 'all'
   const gradYear = statsGradYear.value === 'all' ? null : statsGradYear.value
   receiverData.value = await api.getReceiverDetail(currentUser.value.id, selectedReceiver.value, gradYear)
 }
@@ -1120,8 +1180,57 @@ function rankChart(items) {
 .receiver-unsettled {
   margin-bottom: 8px;
 }
-.receiver-unsettled-5col {
-  grid-template-columns: 2fr 1fr 1fr 1fr 1fr !important;
+.receiver-unsettled-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.receiver-unsettled-type-filter {
+  width: 150px;
+}
+.receiver-unsettled-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.receiver-unsettled-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.receiver-unsettled-summary-label {
+  font-size: 12px;
+  color: #64748b;
+}
+.receiver-unsettled-summary-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.receiver-unsettled-6col {
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr !important;
+}
+
+@media (max-width: 1200px) {
+  .receiver-unsettled-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .receiver-unsettled-type-filter {
+    width: 100%;
+  }
+
+  .receiver-unsettled-summary {
+    grid-template-columns: 1fr;
+  }
 }
 
 .stats-loading {
