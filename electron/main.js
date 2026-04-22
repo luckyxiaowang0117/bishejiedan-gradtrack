@@ -1413,7 +1413,7 @@ function registerIpcHandlers() {
     const gradCond = (graduationYear && graduationYear > 0) ? ' AND graduationYear = @graduationYear' : ''
 
     const allOrders = db.prepare(`
-      SELECT id, title, orderType, totalAmount, dispatchAmount, handlerPaidAmount,
+      SELECT id, title, orderType, totalAmount, paidAmount, dispatchAmount, handlerPaidAmount,
         CASE WHEN handler = '' THEN '本人' ELSE handler END as handler, createdAt
       FROM Orders WHERE userId = @userId AND (receiver = @receiver OR (@receiver = '' AND receiver = ''))${gradCond}
       ORDER BY createdAt DESC
@@ -1424,10 +1424,10 @@ function registerIpcHandlers() {
         COUNT(*) as orderCount,
         SUM(totalAmount) as totalAmount,
         SUM(dispatchAmount) as totalDispatch,
-        SUM(handlerPaidAmount) as paidAmount,
-        SUM(CASE WHEN dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount,
-        SUM(CASE WHEN handlerPaidAmount >= dispatchAmount AND dispatchAmount > 0 THEN 1 ELSE 0 END) as paidCount,
-        SUM(CASE WHEN handlerPaidAmount < dispatchAmount AND dispatchAmount > 0 THEN 1 ELSE 0 END) as unpaidCount
+        SUM(paidAmount) as paidAmount,
+        SUM(CASE WHEN totalAmount > paidAmount THEN totalAmount - paidAmount ELSE 0 END) as unpaidAmount,
+        SUM(CASE WHEN totalAmount > 0 AND paidAmount >= totalAmount THEN 1 ELSE 0 END) as paidCount,
+        SUM(CASE WHEN totalAmount > 0 AND paidAmount < totalAmount THEN 1 ELSE 0 END) as unpaidCount
       FROM Orders WHERE userId = @userId AND (receiver = @receiver OR (@receiver = '' AND receiver = ''))${gradCond}
     `).get({ userId, receiver, graduationYear })
 

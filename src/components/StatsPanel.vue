@@ -194,36 +194,64 @@
                 >
                   <el-option v-for="r in receiverListInHandler" :key="r" :label="r" :value="r" />
                 </el-select>
+                <el-select
+                  v-if="handlerOrderTypeOptions.length > 1"
+                  v-model="handlerOrderTypeFilter"
+                  placeholder="全部类型"
+                  size="small"
+                  style="width: 130px;"
+                >
+                  <el-option label="全部类型" value="all" />
+                  <el-option v-for="item in handlerOrderTypeOptions" :key="item" :label="typeLabelMap[item] || item" :value="item" />
+                </el-select>
               </div>
               <el-button text size="small" @click="kpiFilter = ''">收起</el-button>
             </div>
-            <div v-if="receiverFilterSummary" class="receiver-summary-bar">
-              <span class="receiver-summary-name">{{ selectedReceiverInHandler }}</span>
+            <div v-if="handlerOrderSummary" class="receiver-summary-bar">
+              <span v-if="selectedReceiverInHandler" class="receiver-summary-name">{{ selectedReceiverInHandler }}</span>
               <span class="receiver-summary-item">
-                未结算 <strong>{{ receiverFilterSummary.count }}</strong> 笔
+                {{ kpiFilterLabel }} <strong>{{ handlerOrderSummary.count }}</strong> 笔
               </span>
               <span class="receiver-summary-item">
-                派单总额 <strong>¥{{ fmt(receiverFilterSummary.totalDispatch) }}</strong>
+                总金额 <strong>¥{{ fmt(handlerOrderSummary.totalAmount) }}</strong>
               </span>
               <span class="receiver-summary-item">
-                已付 <strong class="text-green">¥{{ fmt(receiverFilterSummary.totalPaid) }}</strong>
+                已付 <strong class="text-green">¥{{ fmt(handlerOrderSummary.paidAmount) }}</strong>
               </span>
               <span class="receiver-summary-item">
-                待付 <strong class="text-red">¥{{ fmt(receiverFilterSummary.unpaid) }}</strong>
+                未结 <strong class="text-red">¥{{ fmt(handlerOrderSummary.unpaidAmount) }}</strong>
               </span>
             </div>
             <div class="week-orders">
-              <div class="week-order-header handler-order-5col">
-                <span>订单名称</span><span>接单人</span><span>类型</span><span>派单金额</span><span>状态</span>
+              <div class="week-order-header" :class="kpiFilter === 'unpaid' ? 'handler-order-6col' : 'handler-order-5col'">
+                <template v-if="kpiFilter === 'unpaid'">
+                  <span>订单名称</span><span>接单人</span><span>类型</span><span>总金额</span><span>已付金额</span><span>未结金额</span>
+                </template>
+                <template v-else>
+                  <span>订单名称</span><span>接单人</span><span>类型</span><span>派单金额</span><span>状态</span>
+                </template>
               </div>
-              <div v-for="o in kpiFilteredOrders" :key="o.id" class="week-order-row handler-order-5col" @click="$emit('navigate-order', o.id)">
+              <div
+                v-for="o in kpiFilteredOrders"
+                :key="o.id"
+                class="week-order-row"
+                :class="kpiFilter === 'unpaid' ? 'handler-order-6col' : 'handler-order-5col'"
+                @click="$emit('navigate-order', o.id)"
+              >
                 <span class="week-order-title">{{ o.title }}</span>
                 <span class="receiver-tag">{{ o.receiver || '本人' }}</span>
                 <span :style="{ color: typeColorMap[o.orderType] }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
-                <span>¥{{ fmt(o.dispatchAmount) }}</span>
-                <el-tag :type="(o.handlerPaidAmount || 0) >= (o.dispatchAmount || 0) && o.dispatchAmount > 0 ? 'success' : 'warning'" size="small" effect="plain">
-                  {{ (o.handlerPaidAmount || 0) >= (o.dispatchAmount || 0) && o.dispatchAmount > 0 ? '已结清' : '已付¥' + fmt(o.handlerPaidAmount || 0) }}
-                </el-tag>
+                <template v-if="kpiFilter === 'unpaid'">
+                  <span>¥{{ fmt(o.dispatchAmount) }}</span>
+                  <span class="text-green">¥{{ fmt(o.handlerPaidAmount) }}</span>
+                  <span class="text-red">¥{{ fmt((o.dispatchAmount || 0) - (o.handlerPaidAmount || 0)) }}</span>
+                </template>
+                <template v-else>
+                  <span>¥{{ fmt(o.dispatchAmount) }}</span>
+                  <el-tag :type="(o.handlerPaidAmount || 0) >= (o.dispatchAmount || 0) && o.dispatchAmount > 0 ? 'success' : 'warning'" size="small" effect="plain">
+                    {{ (o.handlerPaidAmount || 0) >= (o.dispatchAmount || 0) && o.dispatchAmount > 0 ? '已结清' : '已付¥' + fmt(o.handlerPaidAmount || 0) }}
+                  </el-tag>
+                </template>
               </div>
             </div>
           </div>
@@ -304,7 +332,7 @@
             </div>
             <div class="handler-kpi">
               <div class="handler-kpi-val text-green">¥{{ fmt(receiverData.total.paidAmount) }}</div>
-              <div class="handler-kpi-label">已结派单 ({{ receiverData.total.paidCount }} 笔)</div>
+              <div class="handler-kpi-label">已收金额 ({{ receiverData.total.paidCount }} 笔)</div>
             </div>
             <div class="handler-kpi">
               <div class="handler-kpi-val text-red">¥{{ fmt(receiverData.total.unpaidAmount) }}</div>
@@ -505,11 +533,22 @@ const kpiFilterLabel = computed(() => {
 })
 
 const selectedReceiverInHandler = ref('')
+const handlerOrderTypeFilter = ref('all')
 
 const receiverListInHandler = computed(() => {
   if (!handlerData.value) return []
   const set = new Set((handlerData.value.allOrders || []).map(o => o.receiver || '本人'))
   return Array.from(set)
+})
+
+const handlerOrderTypeOptions = computed(() => {
+  if (!handlerData.value || !kpiFilter.value) return []
+  let orders = handlerData.value.allOrders || []
+  if (selectedReceiverInHandler.value) {
+    orders = orders.filter(o => (o.receiver || '本人') === selectedReceiverInHandler.value)
+  }
+  const set = new Set(orders.map(o => o.orderType || 'thesis'))
+  return Array.from(set).sort((a, b) => (typeLabelMap[a] || a).localeCompare(typeLabelMap[b] || b, 'zh-CN'))
 })
 
 const kpiFilteredOrders = computed(() => {
@@ -518,34 +557,47 @@ const kpiFilteredOrders = computed(() => {
   if (selectedReceiverInHandler.value) {
     orders = orders.filter(o => (o.receiver || '本人') === selectedReceiverInHandler.value)
   }
+  if (handlerOrderTypeFilter.value !== 'all') {
+    orders = orders.filter(o => (o.orderType || 'thesis') === handlerOrderTypeFilter.value)
+  }
   if (kpiFilter.value === 'all') return orders
   if (kpiFilter.value === 'paid') return orders.filter(o => o.dispatchAmount > 0 && (o.handlerPaidAmount || 0) >= o.dispatchAmount)
   if (kpiFilter.value === 'unpaid') return orders.filter(o => o.dispatchAmount > 0 && (o.handlerPaidAmount || 0) < o.dispatchAmount)
   return []
 })
 
-const receiverFilterSummary = computed(() => {
-  if (!selectedReceiverInHandler.value || kpiFilter.value !== 'unpaid') return null
+const handlerOrderSummary = computed(() => {
+  if (!kpiFilter.value) return null
   const orders = kpiFilteredOrders.value
-  const totalDispatch = orders.reduce((s, o) => s + (o.dispatchAmount || 0), 0)
-  const totalPaid = orders.reduce((s, o) => s + (o.handlerPaidAmount || 0), 0)
+  const totalAmount = orders.reduce((s, o) => s + (Number(o.dispatchAmount) || 0), 0)
+  const paidAmount = orders.reduce((s, o) => s + (Number(o.handlerPaidAmount) || 0), 0)
   return {
     count: orders.length,
-    totalDispatch,
-    totalPaid,
-    unpaid: totalDispatch - totalPaid,
+    totalAmount,
+    paidAmount,
+    unpaidAmount: totalAmount - paidAmount,
   }
 })
 
 function toggleKpiFilter(type) {
   kpiFilter.value = kpiFilter.value === type ? '' : type
+  if (!kpiFilter.value) handlerOrderTypeFilter.value = 'all'
 }
 
+watch(selectedReceiverInHandler, () => {
+  handlerOrderTypeFilter.value = 'all'
+})
+
 async function loadHandlerDetail() {
-  if (!selectedHandler.value || !currentUser.value || !currentUser.value.id) { handlerData.value = null; return }
+  if (!selectedHandler.value || !currentUser.value || !currentUser.value.id) {
+    handlerData.value = null
+    handlerOrderTypeFilter.value = 'all'
+    return
+  }
   weekOffset.value = 0
   kpiFilter.value = ''
   selectedReceiverInHandler.value = ''
+  handlerOrderTypeFilter.value = 'all'
   const gradYear = statsGradYear.value === 'all' ? null : statsGradYear.value
   handlerData.value = await api.getHandlerDetail(currentUser.value.id, selectedHandler.value, 0, gradYear)
 }
@@ -1129,6 +1181,9 @@ function rankChart(items) {
 /* Handler order list 5-column layout */
 .handler-order-5col {
   grid-template-columns: 2fr 1fr 1fr 1fr 1fr !important;
+}
+.handler-order-6col {
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr !important;
 }
 .kpi-order-list-left {
   display: flex;
