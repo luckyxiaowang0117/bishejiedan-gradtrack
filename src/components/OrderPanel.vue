@@ -400,6 +400,7 @@ async function handlePayHandler(forceAdjust = false) {
         `派单金额 ¥${dispatch}，当前已付处理人 ¥${current}\n请输入调整后的已付总额：`,
         '调整已付金额',
         {
+          boxWidth: '460px',
           inputValue: String(current),
           inputPattern: /^\d+(\.\d{1,2})?$/,
           inputErrorMessage: '请输入有效金额',
@@ -439,6 +440,7 @@ async function handlePayHandler(forceAdjust = false) {
         `派单金额 ¥${dispatch}，已付 ¥${current}，未结 ¥${remaining}\n请输入本次支付金额：`,
         '支付给处理人',
         {
+          boxWidth: '460px',
           inputValue: String(remaining),
           inputPattern: /^\d+(\.\d{1,2})?$/,
           inputErrorMessage: '请输入有效金额',
