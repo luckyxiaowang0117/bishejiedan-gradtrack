@@ -1,8 +1,8 @@
 version: 5.6.0
 files:
   - url: gradtrack-setup-5.6.0.exe
-    sha512: 2tI4MQxjOsLutMF9Gdj0WB8k3dGhCvYR3gh8XPLaepOY2IsCJcrMjqFQvPkFQAvT8QDH5RO2fYVlGGQiG7sFTw==
-    size: 120900713
+    sha512: HF6ymaWUrjilIDGr/V8QH2V/wjJXYFCZXxza7QQuBYnEGYLFV3iemPdsnLoyjdC33BQkpGPNHuM6n5WlamPSyw==
+    size: 120900692
 path: gradtrack-setup-5.6.0.exe
-sha512: 2tI4MQxjOsLutMF9Gdj0WB8k3dGhCvYR3gh8XPLaepOY2IsCJcrMjqFQvPkFQAvT8QDH5RO2fYVlGGQiG7sFTw==
-releaseDate: '2026-04-25T16:31:05.509Z'
+sha512: HF6ymaWUrjilIDGr/V8QH2V/wjJXYFCZXxza7QQuBYnEGYLFV3iemPdsnLoyjdC33BQkpGPNHuM6n5WlamPSyw==
+releaseDate: '2026-04-25T16:34:51.122Z'
