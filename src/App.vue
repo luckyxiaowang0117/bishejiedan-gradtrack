@@ -341,8 +341,8 @@ const statusMetaMap = {
 function getStatusGroupKey(order) {
   if (!order.isDraftSubmitted) return 'draft'
   if (order.pendingCount > 0) return 'todo'
+  if (order.isDraftSubmitted && order.pendingCount === 0) return 'idle'
   if (isUnpaid(order)) return 'unpaid'
-  if (order.isDraftSubmitted && order.pendingCount === 0 && !isUnpaid(order)) return 'idle'
   return 'active'
 }
 
@@ -443,7 +443,7 @@ const filteredOrders = computed(() => {
   if (filter.value === 'draft') result = result.filter(o => !o.isDraftSubmitted)
   else if (filter.value === 'todo') result = result.filter(o => o.pendingCount > 0)
   else if (filter.value === 'unpaid') result = result.filter(isUnpaid)
-  else if (filter.value === 'idle') result = result.filter(o => o.isDraftSubmitted && o.pendingCount === 0 && !isUnpaid(o))
+  else if (filter.value === 'idle') result = result.filter(o => o.isDraftSubmitted && o.pendingCount === 0)
   return result
 })
 
@@ -451,7 +451,7 @@ const badgeCounts = computed(() => ({
   draft: preFilteredOrders.value.filter(o => !o.isDraftSubmitted).length,
   todo: preFilteredOrders.value.filter(o => o.pendingCount > 0).length,
   unpaid: preFilteredOrders.value.filter(isUnpaid).length,
-  idle: preFilteredOrders.value.filter(o => o.isDraftSubmitted && o.pendingCount === 0 && !isUnpaid(o)).length,
+  idle: preFilteredOrders.value.filter(o => o.isDraftSubmitted && o.pendingCount === 0).length,
 }))
 
 function buildGroupMeta(mode, key) {
