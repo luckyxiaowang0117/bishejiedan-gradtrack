@@ -156,6 +156,16 @@
                   <el-button text size="small" class="fin-link-btn" type="warning" @click="handleRefund">
                     {{ (order.refundAmount || 0) > 0 ? '改退款' : '退款' }}
                   </el-button>
+                  <el-button
+                    v-if="balanceDue > 0 && (order.totalAmount || 0) > 0"
+                    text
+                    size="small"
+                    class="fin-link-btn settle-balance-btn"
+                    type="success"
+                    @click="handleSettleBalance"
+                  >
+                    一键结清
+                  </el-button>
                 </div>
                 <div class="fin-grid fin-grid-4">
                   <div class="fin-cell">
@@ -485,9 +495,60 @@ async function handleRefund() {
   } catch {}
 }
 
+async function handleSettleBalance() {
+  if (!props.currentUser || !props.currentUser.id) {
+    ElMessage.error('未获取到用户信息，请重新登录')
+    return
+  }
+  const total = Number(props.order.totalAmount) || 0
+  const paid = Number(props.order.paidAmount) || 0
+  const remaining = Math.max(total - paid, 0)
+  if (total <= 0 || remaining <= 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `当前已收 ¥${paid.toFixed(0)}，尾款 ¥${remaining.toFixed(0)}。确认后将已收金额更新为全款 ¥${total.toFixed(0)}。`,
+      '确认结清尾款',
+      {
+        type: 'warning',
+        confirmButtonText: '确认结清',
+        cancelButtonText: '取消',
+      }
+    )
+    await api.updateOrder(props.currentUser.id, props.order.id, { paidAmount: total })
+    emit('updated')
+    ElMessage.success('尾款已结清')
+  } catch {}
+}
+
 async function handleDelete() {
   try {
-    await ElMessageBox.confirm(`确定删除「${props.order.title}」？此操作不可恢复。`, '删除项目', { type: 'warning', confirmButtonText: '确定删除', cancelButtonText: '取消' })
+    let deleteFolder = false
+    const folderPath = props.order.folderPath || ''
+    if (folderPath) {
+      await ElMessageBox.confirm(
+        `确定删除「${props.order.title}」？\n\n检测到本地项目文件夹：\n${folderPath}\n\n选择“删除订单和文件夹”会同时移除本地资料；选择“仅删除订单”会保留文件夹。`,
+        '删除项目',
+        {
+          type: 'warning',
+          distinguishCancelAndClose: true,
+          confirmButtonText: '删除订单和文件夹',
+          cancelButtonText: '仅删除订单',
+          closeOnClickModal: false,
+        }
+      )
+      deleteFolder = true
+    } else {
+      await ElMessageBox.confirm(
+        `确定删除「${props.order.title}」？此操作会删除软件中的订单、修改记录和反馈项。`,
+        '删除项目',
+        {
+          type: 'warning',
+          confirmButtonText: '确定删除',
+          cancelButtonText: '取消',
+        }
+      )
+    }
     const { value: pwd } = await ElMessageBox.prompt('请输入您的登录密码以确认删除', '身份验证', {
       inputType: 'password',
       inputPlaceholder: '输入密码',
@@ -503,10 +564,51 @@ async function handleDelete() {
       ElMessage.error('密码错误，删除已取消')
       return
     }
-    await api.deleteOrder(props.currentUser.id, props.order.id)
+    const result = await api.deleteOrder(props.currentUser.id, props.order.id, { deleteFolder })
+    if (!result?.success) {
+      ElMessage.error(result?.error === 'ORDER_NOT_FOUND' ? '项目不存在或已被删除' : (result?.error || '删除失败'))
+      return
+    }
     emit('deleted')
-    ElMessage.success('项目已删除')
-  } catch {}
+    if (deleteFolder) {
+      if (result.folder?.deleted) {
+        ElMessage.success('项目和本地文件夹已删除')
+      } else if (result.folder?.error) {
+        ElMessage.warning(`项目已删除，但文件夹未删除：${result.folder.error}`)
+      } else {
+        ElMessage.success('项目已删除')
+      }
+    } else {
+      ElMessage.success(folderPath ? '项目已删除，本地文件夹已保留' : '项目已删除')
+    }
+  } catch (err) {
+    if (err === 'cancel' && props.order.folderPath) {
+      try {
+        const { value: pwd } = await ElMessageBox.prompt('请输入您的登录密码以确认删除', '身份验证', {
+          inputType: 'password',
+          inputPlaceholder: '输入密码',
+          confirmButtonText: '确认删除',
+          cancelButtonText: '取消',
+        })
+        if (!props.currentUser) {
+          ElMessage.error('无法验证身份，请重新登录')
+          return
+        }
+        const ok = await api.verifyPassword(props.currentUser.id, pwd)
+        if (!ok) {
+          ElMessage.error('密码错误，删除已取消')
+          return
+        }
+        const result = await api.deleteOrder(props.currentUser.id, props.order.id, { deleteFolder: false })
+        if (!result?.success) {
+          ElMessage.error(result?.error === 'ORDER_NOT_FOUND' ? '项目不存在或已被删除' : (result?.error || '删除失败'))
+          return
+        }
+        emit('deleted')
+        ElMessage.success('项目已删除，本地文件夹已保留')
+      } catch {}
+    }
+  }
 }
 
 watch(() => props.order.id, loadRevisions, { immediate: true })

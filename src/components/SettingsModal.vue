@@ -197,7 +197,26 @@
         </div>
       </div>
 
-      <!-- Section 7: Reset Data -->
+      <!-- Section 7: Folder Migration -->
+      <div class="settings-section folder-migration-section">
+        <div class="section-header">
+          <el-icon :size="18" color="#7c3aed"><FolderOpened /></el-icon>
+          <div>
+            <div class="section-title">历史文件夹按毕业届整理</div>
+            <div class="section-desc">将旧结构项目复制到“毕业届/业务类型/学校/专业”目录，并同步更新数据库路径</div>
+          </div>
+        </div>
+        <div class="migration-note">
+          执行前会先生成预览；迁移会复制资料到新目录并保留旧目录，确认无误后可手动清理旧文件夹。
+        </div>
+        <div class="migration-actions">
+          <el-button type="primary" plain :loading="folderMigrationBusy" @click="handlePreviewGraduationMigration">
+            <el-icon><View /></el-icon> 预览可迁移项目
+          </el-button>
+        </div>
+      </div>
+
+      <!-- Section 8: Reset Data -->
       <div class="settings-section reset-section">
         <div class="section-header">
           <el-icon :size="18" color="#e11d48"><WarnTriangleFilled /></el-icon>
@@ -253,6 +272,74 @@
       <el-button type="primary" @click="missingFolderDialogVisible = false">我知道了</el-button>
     </template>
   </el-dialog>
+
+  <el-dialog
+    v-model="folderMigrationDialogVisible"
+    title="历史文件夹迁移预览"
+    width="var(--gt-dialog-xl)"
+    align-center
+    :close-on-click-modal="false"
+    class="folder-migration-dialog"
+  >
+    <div class="folder-migration-body">
+      <el-alert
+        type="info"
+        show-icon
+        :closable="false"
+        title="迁移执行时会复制文件夹并更新数据库路径，旧文件夹会保留。"
+      />
+
+      <div class="folder-migration-summary">
+        <div>
+          <span class="summary-num">{{ folderMigrationPreview?.summary?.migratableCount || 0 }}</span>
+          <span class="summary-label">可迁移</span>
+        </div>
+        <div>
+          <span class="summary-num muted">{{ folderMigrationPreview?.summary?.skippedCount || 0 }}</span>
+          <span class="summary-label">已跳过</span>
+        </div>
+      </div>
+
+      <div v-if="(folderMigrationPreview?.items || []).length > 0" class="folder-migration-list">
+        <div v-for="item in folderMigrationPreview.items" :key="item.orderId" class="folder-migration-item">
+          <div class="folder-migration-title">{{ item.title }} <span>{{ item.graduationYear }}届</span></div>
+          <div class="path-line">
+            <span>旧</span>
+            <code>{{ item.oldPath }}</code>
+          </div>
+          <div class="path-line">
+            <span>新</span>
+            <code>{{ item.newPath }}</code>
+          </div>
+        </div>
+      </div>
+      <el-empty v-else description="当前没有需要迁移的项目文件夹" />
+
+      <el-collapse v-if="(folderMigrationPreview?.skipped || []).length > 0" class="folder-migration-skipped">
+        <el-collapse-item :title="`查看跳过项目（${folderMigrationPreview.skipped.length}）`" name="skipped">
+          <div class="skipped-list">
+            <div v-for="item in folderMigrationPreview.skipped" :key="`${item.orderId}-${item.reason}`" class="skipped-item">
+              <div class="skipped-title">{{ item.title }}</div>
+              <div class="skipped-reason">{{ getFolderMigrationReason(item.reason) }}<template v-if="item.detail">：{{ item.detail }}</template></div>
+              <div v-if="item.oldPath" class="skipped-path">{{ item.oldPath }}</div>
+            </div>
+          </div>
+        </el-collapse-item>
+      </el-collapse>
+    </div>
+
+    <template #footer>
+      <el-button @click="folderMigrationDialogVisible = false">取消</el-button>
+      <el-button
+        type="primary"
+        :disabled="!(folderMigrationPreview?.items || []).length"
+        :loading="folderMigrationBusy"
+        @click="handleRunGraduationMigration"
+      >
+        确认执行迁移
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -269,6 +356,9 @@ const autoLaunch = ref(false)
 const designTypes = ref([])
 const migrationBusy = ref(false)
 const syncBusy = ref(false)
+const folderMigrationBusy = ref(false)
+const folderMigrationDialogVisible = ref(false)
+const folderMigrationPreview = ref(null)
 const missingFolderDialogVisible = ref(false)
 const missingOrderFolders = ref([])
 const syncOverview = ref({
@@ -293,6 +383,20 @@ const formattedLastSyncAt = computed(() => {
   const pad = (num) => String(num).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 })
+
+const folderMigrationReasonMap = {
+  EMPTY_PATH: '未关联项目文件夹',
+  NO_GRADUATION_YEAR: '缺少毕业届',
+  SOURCE_NOT_FOUND: '原文件夹不存在',
+  OUTSIDE_ROOT: '不在当前根目录下',
+  ALREADY_MIGRATED: '已在毕业届目录中',
+  SAME_PATH: '新旧路径一致',
+  TARGET_EXISTS: '目标文件夹已存在',
+}
+
+function getFolderMigrationReason(reason) {
+  return folderMigrationReasonMap[reason] || reason || '未知原因'
+}
 
 function resetPwdForm() {
   pwdForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
@@ -550,6 +654,73 @@ async function handleImportMigration() {
   }
 }
 
+async function handlePreviewGraduationMigration() {
+  if (!props.currentUser?.id) {
+    ElMessage.error('未获取到当前用户，请重新登录后重试')
+    return
+  }
+  folderMigrationBusy.value = true
+  try {
+    const result = await api.previewGraduationFolderMigration(props.currentUser.id)
+    if (!result?.success) {
+      const errorTextMap = {
+        INVALID_USER: '当前用户无效，请重新登录',
+        ROOT_DIR_NOT_SET: '请先设置项目文件夹根目录',
+      }
+      ElMessage.error(errorTextMap[result?.error] || result?.error || '生成预览失败')
+      return
+    }
+    folderMigrationPreview.value = result
+    folderMigrationDialogVisible.value = true
+  } finally {
+    folderMigrationBusy.value = false
+  }
+}
+
+async function handleRunGraduationMigration() {
+  if (!props.currentUser?.id) {
+    ElMessage.error('未获取到当前用户，请重新登录后重试')
+    return
+  }
+  const count = folderMigrationPreview.value?.items?.length || 0
+  if (count <= 0) return
+  try {
+    await ElMessageBox.confirm(
+      `将复制 ${count} 个项目文件夹到毕业届目录，并更新数据库中的订单、修改轮次和附件路径。旧文件夹会保留。`,
+      '确认执行迁移',
+      { type: 'warning', confirmButtonText: '确认迁移', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  folderMigrationBusy.value = true
+  try {
+    const result = await api.runGraduationFolderMigration(props.currentUser.id)
+    if (!result?.success && !result?.summary) {
+      const errorTextMap = {
+        INVALID_USER: '当前用户无效，请重新登录',
+        ROOT_DIR_NOT_SET: '请先设置项目文件夹根目录',
+      }
+      ElMessage.error(errorTextMap[result?.error] || result?.error || '迁移失败')
+      return
+    }
+    const migrated = result.summary?.migratedCount || 0
+    const failed = result.summary?.failedCount || 0
+    if (failed > 0) {
+      ElMessage.warning(`已迁移 ${migrated} 个，${failed} 个失败，请重新预览查看剩余项目`)
+    } else {
+      ElMessage.success(`已迁移 ${migrated} 个项目文件夹`)
+    }
+    folderMigrationDialogVisible.value = false
+    folderMigrationPreview.value = null
+    emit('imported')
+    await loadSyncOverview()
+  } finally {
+    folderMigrationBusy.value = false
+  }
+}
+
 async function copyMissingPath(path) {
   const text = (path || '').trim()
   if (!text) return
@@ -791,6 +962,13 @@ function convertToSubTypes(dt) {
   background: #f8fbff;
 }
 
+.folder-migration-section {
+  border: 1px solid #ede9fe;
+  border-radius: 12px;
+  padding: 14px;
+  background: #fbfaff;
+}
+
 .migration-note {
   font-size: 12px;
   color: #64748b;
@@ -804,7 +982,8 @@ function convertToSubTypes(dt) {
 }
 
 .settings-dialog :deep(.el-dialog),
-.missing-folder-dialog :deep(.el-dialog) {
+.missing-folder-dialog :deep(.el-dialog),
+.folder-migration-dialog :deep(.el-dialog) {
   margin: 0 !important;
 }
 
@@ -814,6 +993,11 @@ function convertToSubTypes(dt) {
 }
 
 .missing-folder-dialog :deep(.el-dialog__body) {
+  max-height: min(72vh, 640px);
+  overflow: auto;
+}
+
+.folder-migration-dialog :deep(.el-dialog__body) {
   max-height: min(72vh, 640px);
   overflow: auto;
 }
@@ -874,6 +1058,143 @@ function convertToSubTypes(dt) {
   border: 1px dashed #cbd5e1;
   border-radius: 8px;
   padding: 8px;
+}
+
+.folder-migration-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.folder-migration-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.folder-migration-summary > div {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.summary-num {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  color: #7c3aed;
+  line-height: 1;
+}
+
+.summary-num.muted {
+  color: #64748b;
+}
+
+.summary-label {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.folder-migration-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.folder-migration-item {
+  border: 1px solid #ede9fe;
+  border-radius: 10px;
+  background: #fbfaff;
+  padding: 12px;
+}
+
+.folder-migration-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 8px;
+}
+
+.folder-migration-title span {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #7c3aed;
+  background: #ede9fe;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.path-line {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.path-line span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.path-line code {
+  display: block;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  color: #475569;
+  word-break: break-all;
+  background: #ffffff;
+  border: 1px dashed #ddd6fe;
+  border-radius: 8px;
+  padding: 7px 8px;
+}
+
+.folder-migration-skipped {
+  border-top: 1px solid #f1f5f9;
+}
+
+.skipped-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skipped-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.skipped-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.skipped-reason {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #7c3aed;
+}
+
+.skipped-path {
+  margin-top: 4px;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 11px;
+  color: #64748b;
+  word-break: break-all;
 }
 
 /* Reset section */

@@ -386,6 +386,100 @@ function getOrderSortClause(sortMode) {
   }
 }
 
+function getOrderTypeSubDir(orderType) {
+  const typeSubDirs = {
+    thesis: '毕业设计',
+    format: '格式修改',
+    translation: '外文翻译',
+    design: '毕业设计',
+    reduction: '论文降重',
+    special: '特殊订单',
+  }
+  return typeSubDirs[orderType || 'thesis'] || '毕业设计'
+}
+
+function sanitizePathPart(str, fallback = '') {
+  return (str || fallback || '').trim().replace(/[<>:"/\\|?*]/g, '_')
+}
+
+function buildGraduationOrderFolderPath(rootDirectory, order) {
+  const type = order.orderType || 'thesis'
+  const folderYear = Number(order.graduationYear) || new Date().getFullYear()
+  const subDir = getOrderTypeSubDir(type)
+  const uniName = sanitizePathPart(order.university)
+  const majorName = sanitizePathPart(order.major)
+  const studentNamePart = sanitizePathPart(order.studentName)
+  const sanitizedTitle = sanitizePathPart(order.title, '未命名项目') || '未命名项目'
+  const folderName = studentNamePart
+    ? `${folderYear}-${studentNamePart}-${sanitizedTitle}`
+    : `${folderYear}-${sanitizedTitle}`
+  return path.join(rootDirectory, `${folderYear}届`, subDir, uniName, `${majorName}专业`, folderName)
+}
+
+function isSamePath(left, right) {
+  if (!left || !right) return false
+  const a = path.normalize(left)
+  const b = path.normalize(right)
+  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b
+}
+
+function isPathWithin(basePath, targetPath) {
+  if (!basePath || !targetPath) return false
+  const relative = path.relative(path.normalize(basePath), path.normalize(targetPath))
+  return !!relative && relative !== '.' && !relative.startsWith('..') && !path.isAbsolute(relative)
+}
+
+function hasGraduationLayer(rootDirectory, folderPath, graduationYear) {
+  if (!rootDirectory || !folderPath || !graduationYear) return false
+  const relative = path.relative(path.normalize(rootDirectory), path.normalize(folderPath))
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return false
+  return relative.split(/[\\/]+/).includes(`${graduationYear}届`)
+}
+
+function validateOrderFolderDeletion(folderPath, rootDirectory) {
+  if (!folderPath || typeof folderPath !== 'string') {
+    return { ok: false, error: '未关联项目文件夹' }
+  }
+
+  const normalized = path.normalize(folderPath)
+  const parsed = path.parse(normalized)
+  if (isSamePath(normalized, parsed.root)) {
+    return { ok: false, error: '项目文件夹指向磁盘根目录，已拒绝删除' }
+  }
+
+  const highRiskPaths = [
+    app.getPath('home'),
+    app.getPath('desktop'),
+    app.getPath('documents'),
+    app.getPath('downloads'),
+    app.getPath('userData'),
+  ].filter(Boolean)
+  if (highRiskPaths.some(p => isSamePath(normalized, p))) {
+    return { ok: false, error: '项目文件夹指向高风险目录，已拒绝删除' }
+  }
+
+  if (rootDirectory) {
+    const root = normalizeRootPath(rootDirectory)
+    if (isSamePath(normalized, root)) {
+      return { ok: false, error: '项目文件夹指向根目录本身，已拒绝删除' }
+    }
+    if (!isPathWithin(root, normalized)) {
+      return { ok: false, error: '项目文件夹不在当前根目录下，已拒绝删除' }
+    }
+  }
+
+  if (!fs.existsSync(normalized)) {
+    return { ok: true, missing: true, path: normalized }
+  }
+
+  const stat = fs.statSync(normalized)
+  if (!stat.isDirectory()) {
+    return { ok: false, error: '项目路径不是文件夹，已拒绝删除' }
+  }
+
+  return { ok: true, missing: false, path: normalized }
+}
+
 function registerIpcHandlers() {
   const db = getDb()
   const SYNC_PREVIEW_LIMIT = 3
@@ -1129,6 +1223,184 @@ function registerIpcHandlers() {
     }
   }
 
+  function rewritePathForOrderFolder(value, oldFolderPath, newFolderPath) {
+    if (!value || typeof value !== 'string') return value || ''
+    if (isSamePath(value, oldFolderPath) || isPathWithin(oldFolderPath, value)) {
+      return replacePathPrefix(oldFolderPath, newFolderPath, value)
+    }
+    return value
+  }
+
+  function rewriteAttachmentsForOrderFolder(attachmentsText, oldFolderPath, newFolderPath) {
+    if (!attachmentsText) return '[]'
+    try {
+      const arr = JSON.parse(attachmentsText)
+      if (!Array.isArray(arr)) return attachmentsText
+      let changed = false
+      for (const item of arr) {
+        if (item && typeof item.path === 'string') {
+          const nextPath = rewritePathForOrderFolder(item.path, oldFolderPath, newFolderPath)
+          if (nextPath !== item.path) {
+            item.path = nextPath
+            changed = true
+          }
+        }
+      }
+      return changed ? JSON.stringify(arr) : attachmentsText
+    } catch {
+      return attachmentsText
+    }
+  }
+
+  function buildGraduationFolderMigrationPreview(userId) {
+    const rootDirectory = getRootDirectory()
+    if (!userId) return { success: false, error: 'INVALID_USER' }
+    if (!rootDirectory) return { success: false, error: 'ROOT_DIR_NOT_SET' }
+
+    const orders = db.prepare('SELECT * FROM Orders WHERE userId = ? ORDER BY graduationYear DESC, id ASC').all(userId)
+    const items = []
+    const skipped = []
+
+    function pushSkipped(order, reason, detail = '') {
+      skipped.push({
+        orderId: order.id,
+        title: order.title || '未命名订单',
+        graduationYear: order.graduationYear || 0,
+        oldPath: order.folderPath || '',
+        reason,
+        detail,
+      })
+    }
+
+    for (const order of orders) {
+      const graduationYear = Number(order.graduationYear) || 0
+      const oldPath = order.folderPath || ''
+      if (!oldPath) {
+        pushSkipped(order, 'EMPTY_PATH', '未关联项目文件夹')
+        continue
+      }
+      if (!graduationYear) {
+        pushSkipped(order, 'NO_GRADUATION_YEAR', '订单缺少毕业届')
+        continue
+      }
+      if (!fs.existsSync(oldPath)) {
+        pushSkipped(order, 'SOURCE_NOT_FOUND', '原文件夹不存在')
+        continue
+      }
+      if (!isSamePath(rootDirectory, oldPath) && !isPathWithin(rootDirectory, oldPath)) {
+        pushSkipped(order, 'OUTSIDE_ROOT', '原路径不在当前根目录下')
+        continue
+      }
+      if (hasGraduationLayer(rootDirectory, oldPath, graduationYear)) {
+        pushSkipped(order, 'ALREADY_MIGRATED', '路径中已包含对应毕业届目录')
+        continue
+      }
+
+      const newPath = buildGraduationOrderFolderPath(rootDirectory, order)
+      if (isSamePath(oldPath, newPath)) {
+        pushSkipped(order, 'SAME_PATH', '新旧路径一致')
+        continue
+      }
+      if (fs.existsSync(newPath)) {
+        pushSkipped(order, 'TARGET_EXISTS', '目标文件夹已存在')
+        continue
+      }
+
+      items.push({
+        orderId: order.id,
+        title: order.title || '未命名订单',
+        graduationYear,
+        oldPath,
+        newPath,
+      })
+    }
+
+    return {
+      success: true,
+      rootDirectory,
+      totalOrders: orders.length,
+      items,
+      skipped,
+      summary: {
+        migratableCount: items.length,
+        skippedCount: skipped.length,
+      },
+    }
+  }
+
+  function runGraduationFolderMigration(userId) {
+    const preview = buildGraduationFolderMigrationPreview(userId)
+    if (!preview.success) return preview
+
+    const migrated = []
+    const failed = []
+
+    for (const item of preview.items) {
+      try {
+        if (fs.existsSync(item.newPath)) {
+          failed.push({ ...item, error: '目标文件夹已存在' })
+          continue
+        }
+
+        copyDirRecursive(item.oldPath, item.newPath)
+
+        const updateTxn = db.transaction(() => {
+          const revisions = db.prepare('SELECT id, folderPath FROM Revisions WHERE orderId = ?').all(item.orderId)
+          for (const revision of revisions) {
+            const nextRevisionPath = rewritePathForOrderFolder(revision.folderPath || '', item.oldPath, item.newPath)
+            if (nextRevisionPath !== (revision.folderPath || '')) {
+              db.prepare('UPDATE Revisions SET folderPath = ? WHERE id = ?').run(nextRevisionPath, revision.id)
+              const revisionRow = getRevisionWithContextById(revision.id)
+              recordRevisionSyncEvent('update', revisionRow, ['folderPath'])
+            }
+          }
+
+          const feedbackItems = db.prepare(`
+            SELECT fi.id, fi.imagePath, fi.attachments
+            FROM FeedbackItems fi
+            JOIN Revisions r ON r.id = fi.revisionId
+            WHERE r.orderId = ?
+          `).all(item.orderId)
+          for (const feedback of feedbackItems) {
+            const nextImagePath = feedback.imagePath
+              ? rewritePathForOrderFolder(feedback.imagePath, item.oldPath, item.newPath)
+              : feedback.imagePath
+            const nextAttachments = rewriteAttachmentsForOrderFolder(feedback.attachments || '[]', item.oldPath, item.newPath)
+            const changedFields = []
+            if (nextImagePath !== feedback.imagePath) changedFields.push('imagePath')
+            if (nextAttachments !== (feedback.attachments || '[]')) changedFields.push('attachments')
+            if (changedFields.length > 0) {
+              db.prepare('UPDATE FeedbackItems SET imagePath = ?, attachments = ? WHERE id = ?').run(nextImagePath, nextAttachments, feedback.id)
+              const feedbackRow = getFeedbackWithContextById(feedback.id)
+              recordFeedbackSyncEvent('update', feedbackRow, changedFields)
+            }
+          }
+
+          db.prepare('UPDATE Orders SET folderPath = ? WHERE id = ? AND userId = ?').run(item.newPath, item.orderId, userId)
+          const orderRow = getOrderById(item.orderId)
+          recordOrderSyncEvent('update', orderRow, ['folderPath'])
+        })
+
+        updateTxn()
+        migrated.push(item)
+      } catch (err) {
+        failed.push({ ...item, error: err.message || String(err) })
+      }
+    }
+
+    return {
+      success: failed.length === 0,
+      migrated,
+      failed,
+      skipped: preview.skipped,
+      summary: {
+        migratedCount: migrated.length,
+        failedCount: failed.length,
+        skippedCount: preview.skipped.length,
+      },
+    }
+  }
+
   // ===== Window Controls =====
   ipcMain.handle('window:getPlatform', () => process.platform)
   ipcMain.handle('window:minimize', () => mainWindow.minimize())
@@ -1727,6 +1999,14 @@ function registerIpcHandlers() {
     }
   })
 
+  ipcMain.handle('folderMigration:previewGraduation', (_, userId) => {
+    return buildGraduationFolderMigrationPreview(userId)
+  })
+
+  ipcMain.handle('folderMigration:runGraduation', (_, userId) => {
+    return runGraduationFolderMigration(userId)
+  })
+
   // ===== Auto Launch =====
   ipcMain.handle('autoLaunch:get', () => {
     const settings = app.getLoginItemSettings()
@@ -1826,12 +2106,21 @@ function registerIpcHandlers() {
     return true
   })
 
-  ipcMain.handle('orders:delete', (_, userId, id) => {
+  ipcMain.handle('orders:delete', (_, userId, id, options = {}) => {
     // Verify the order belongs to the user before deleting
     const order = db.prepare('SELECT id FROM Orders WHERE id = ? AND userId = ?').get(id, userId)
-    if (!order) return false
+    if (!order) return { success: false, error: 'ORDER_NOT_FOUND' }
     
     const orderRow = getOrderById(id)
+    const deleteFolder = !!options.deleteFolder
+    let folderDeleteResult = {
+      requested: deleteFolder,
+      deleted: false,
+      skipped: !deleteFolder,
+      error: '',
+      path: orderRow?.folderPath || '',
+    }
+
     const deleteTransaction = db.transaction(() => {
       const revisions = db.prepare('SELECT id FROM Revisions WHERE orderId = ?').all(id)
       for (const rev of revisions) {
@@ -1842,7 +2131,35 @@ function registerIpcHandlers() {
     })
     deleteTransaction()
     recordOrderSyncEvent('delete', orderRow)
-    return true
+
+    if (deleteFolder) {
+      const validation = validateOrderFolderDeletion(orderRow?.folderPath || '', getRootDirectory())
+      folderDeleteResult = {
+        requested: true,
+        deleted: false,
+        skipped: false,
+        error: '',
+        path: validation.path || orderRow?.folderPath || '',
+      }
+      if (!validation.ok) {
+        folderDeleteResult.error = validation.error || '文件夹校验失败'
+      } else if (validation.missing) {
+        folderDeleteResult.skipped = true
+        folderDeleteResult.error = '文件夹不存在，已跳过删除'
+      } else {
+        try {
+          fs.rmSync(validation.path, { recursive: true, force: true })
+          folderDeleteResult.deleted = true
+        } catch (err) {
+          folderDeleteResult.error = err.message || '文件夹删除失败'
+        }
+      }
+    }
+
+    return {
+      success: true,
+      folder: folderDeleteResult,
+    }
   })
 
   // ===== Revisions =====
@@ -2149,34 +2466,16 @@ function registerIpcHandlers() {
     return true
   })
 
-  ipcMain.handle('fs:generateOrderFolder', (_, { rootDirectory, university, major, studentName, title, includesDesign, orderType }) => {
+  ipcMain.handle('fs:generateOrderFolder', (_, { rootDirectory, university, major, studentName, title, includesDesign, orderType, graduationYear }) => {
     const type = orderType || 'thesis'
-    const typeSubDirs = {
-      thesis: '毕业设计',
-      format: '格式修改',
-      translation: '外文翻译',
-      design: '毕业设计',
-      reduction: '论文降重',
-      special: '特殊订单',
-    }
-    const subDir = typeSubDirs[type] || '毕业设计'
-    const year = new Date().getFullYear()
-    
-    // 路径组成部分清理（去除非法字符）
-    const sanitizePathPart = (str) => (str || '').trim().replace(/[<>:"/\\|?*]/g, '_')
-    
-    const uniName = sanitizePathPart(university)
-    const majorName = sanitizePathPart(major)
-    const studentNamePart = sanitizePathPart(studentName)
-    const sanitizedTitle = sanitizePathPart(title) || '未命名项目'
-    
-    // 构建文件夹名称：年份-学生姓名-项目名称 或 年份-项目名称
-    const folderName = studentNamePart 
-      ? `${year}-${studentNamePart}-${sanitizedTitle}`
-      : `${year}-${sanitizedTitle}`
-    
-    // 构建完整路径：根目录/类型/学校/专业/文件夹名
-    const folderPath = path.join(rootDirectory, subDir, uniName, `${majorName}专业`, folderName)
+    const folderPath = buildGraduationOrderFolderPath(rootDirectory, {
+      university,
+      major,
+      studentName,
+      title,
+      orderType: type,
+      graduationYear,
+    })
     try {
       const fs = require('fs')
       fs.mkdirSync(folderPath, { recursive: true })

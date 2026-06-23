@@ -441,11 +441,11 @@ const typeSubDirMap = {
   special: '特殊订单',
 }
 const folderPreview = computed(() => {
-  const year = new Date().getFullYear()
+  const year = Number(form.value.graduationYear) || new Date().getFullYear()
   const uni = form.value.university || '学校名称'
   const title = form.value.title || '项目名称'
   const subDir = typeSubDirMap[form.value.orderType] || '毕业设计'
-  return `${subDir}/${year}-${uni}-${title}`
+  return `${year}届/${subDir}/${uni}/${year}-${title}`
 })
 
 watch(() => props.visible, (val) => {
@@ -565,6 +565,7 @@ async function handleSave() {
           title: payload.title,
           includesDesign: payload.includesDesign,
           orderType: payload.orderType,
+          graduationYear: payload.graduationYear,
         })
         if (r.success && r.folderPath) {
           await api.updateOrder(currentUser.value.id, Number(newId), { folderPath: r.folderPath })

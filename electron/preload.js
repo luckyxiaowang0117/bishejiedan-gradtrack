@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportMigration: (userId) => ipcRenderer.invoke('migration:export', userId),
   importMigration: (params) => ipcRenderer.invoke('migration:import', params),
   selectMigrationFile: () => ipcRenderer.invoke('migration:selectImportFile'),
+  previewGraduationFolderMigration: (userId) => ipcRenderer.invoke('folderMigration:previewGraduation', userId),
+  runGraduationFolderMigration: (userId) => ipcRenderer.invoke('folderMigration:runGraduation', userId),
 
   // Auto Launch
   getAutoLaunch: () => ipcRenderer.invoke('autoLaunch:get'),
@@ -44,7 +46,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDistinctValues: (userId, field) => ipcRenderer.invoke('orders:distinctValues', userId, field),
   createOrder: (data) => ipcRenderer.invoke('orders:create', data),
   updateOrder: (userId, id, data) => ipcRenderer.invoke('orders:update', userId, id, data),
-  deleteOrder: (userId, id) => ipcRenderer.invoke('orders:delete', userId, id),
+  deleteOrder: (userId, id, options) => ipcRenderer.invoke('orders:delete', userId, id, options),
 
   // Revisions
   listRevisions: (orderId) => ipcRenderer.invoke('revisions:listByOrder', orderId),
