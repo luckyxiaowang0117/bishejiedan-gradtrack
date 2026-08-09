@@ -260,6 +260,11 @@
               </div>
               <div v-if="order.orderCode" class="card-order-code">{{ order.orderCode }}</div>
 
+              <div v-if="(order.orderType || 'thesis') === 'special'" class="card-special-service">
+                <span class="card-special-label">服务项目:</span>
+                <span class="card-special-value">{{ order.specialService || '未填写' }}</span>
+              </div>
+
               <div v-if="order.university" class="card-school">
                 <el-icon :size="12"><OfficeBuilding /></el-icon>
                 {{ order.university }}<span v-if="order.major"> · {{ order.major }}</span>
@@ -1235,6 +1240,33 @@ function getStatus(order) {
   align-items: center;
   gap: 4px;
   margin-bottom: 6px;
+}
+
+.card-special-service {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  font-size: var(--gt-text-xs);
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-bottom: 6px;
+  min-width: 0;
+}
+
+.card-special-label {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.card-special-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-people {
