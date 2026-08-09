@@ -321,7 +321,7 @@
 
         <template v-if="receiverData">
           <!-- Receiver KPI -->
-          <div class="handler-kpi-row receiver-kpi-row">
+          <div class="handler-kpi-row">
             <div class="handler-kpi">
               <div class="handler-kpi-val">{{ receiverData.total.orderCount }}</div>
               <div class="handler-kpi-label">总接单量</div>
@@ -336,76 +336,7 @@
             </div>
             <div class="handler-kpi">
               <div class="handler-kpi-val text-red">¥{{ fmt(receiverData.total.unpaidAmount) }}</div>
-              <div class="handler-kpi-label">未收尾款 ({{ receiverData.total.unpaidCount }} 笔)</div>
-            </div>
-            <div class="handler-kpi">
-              <div class="handler-kpi-val">¥{{ fmt(receiverData.total.totalDispatch) }}</div>
-              <div class="handler-kpi-label">派单成本</div>
-            </div>
-            <div class="handler-kpi">
-              <div class="handler-kpi-val">¥{{ fmt(receiverData.total.refundAmount) }}</div>
-              <div class="handler-kpi-label">退款金额</div>
-            </div>
-            <div class="handler-kpi">
-              <div class="handler-kpi-val" :class="receiverData.total.expectedProfit >= 0 ? 'text-green' : 'text-red'">¥{{ fmt(receiverData.total.expectedProfit) }}</div>
-              <div class="handler-kpi-label">预计利润</div>
-            </div>
-            <div class="handler-kpi">
-              <div class="handler-kpi-val" :class="receiverData.total.actualProfit >= 0 ? 'text-green' : 'text-red'">¥{{ fmt(receiverData.total.actualProfit) }}</div>
-              <div class="handler-kpi-label">实收利润</div>
-            </div>
-            <div class="handler-kpi">
-              <div class="handler-kpi-val text-green">¥{{ fmt(receiverData.total.settledProfit) }}</div>
-              <div class="handler-kpi-label">已结算利润</div>
-            </div>
-            <div class="handler-kpi">
-              <div class="handler-kpi-val text-red">¥{{ fmt(receiverData.total.unsettledProfit) }}</div>
-              <div class="handler-kpi-label">待结算利润</div>
-            </div>
-          </div>
-
-          <!-- Receiver Profit Detail -->
-          <div v-if="receiverProfitOrders.length > 0" class="receiver-profit-detail">
-            <div class="receiver-unsettled-head">
-              <h4 class="sub-section-title">利润明细 ({{ receiverProfitOrders.length }})</h4>
-              <div class="receiver-profit-actions">
-                <span class="receiver-profit-selected">已选 {{ selectedReceiverProfitOrderIds.length }} 单 / ¥{{ fmt(selectedReceiverSettlementAmount) }}</span>
-                <el-button size="small" @click="selectAllReceiverProfitOrders">全选待结算</el-button>
-                <el-button size="small" @click="clearReceiverProfitSelection">清空</el-button>
-                <el-button type="primary" size="small" :disabled="selectedReceiverSettlementAmount <= 0" @click="createReceiverSettlement">新增结算</el-button>
-              </div>
-            </div>
-
-            <div class="week-orders receiver-profit-table">
-              <div class="week-order-header receiver-profit-12col">
-                <span>选择</span><span>订单编号</span><span>订单名称</span><span>类型</span><span>处理人</span><span>订单额</span><span>已收</span><span>派单</span><span>退款</span><span>实收利润</span><span>已结算</span><span>待结算</span>
-              </div>
-              <div
-                v-for="o in receiverProfitOrders"
-                :key="o.id"
-                class="week-order-row receiver-profit-12col"
-                @click="$emit('navigate-order', o.id)"
-              >
-                <span @click.stop>
-                  <input
-                    type="checkbox"
-                    :disabled="(o.unsettledProfit || 0) <= 0"
-                    :checked="selectedReceiverProfitOrderIds.includes(o.id)"
-                    @change="toggleReceiverProfitOrder(o.id)"
-                  />
-                </span>
-                <span>{{ o.orderCode || '—' }}</span>
-                <span class="week-order-title">{{ o.title }}</span>
-                <span :style="{ color: typeColorMap[o.orderType] }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
-                <span>{{ o.handler || '本人' }}</span>
-                <span>¥{{ fmt(o.totalAmount) }}</span>
-                <span class="text-green">¥{{ fmt(o.paidAmount) }}</span>
-                <span>¥{{ fmt(o.dispatchAmount) }}</span>
-                <span>¥{{ fmt(o.refundAmount) }}</span>
-                <span :class="(o.actualProfit || 0) >= 0 ? 'text-green' : 'text-red'">¥{{ fmt(o.actualProfit) }}</span>
-                <span>¥{{ fmt(o.settledAmount) }}</span>
-                <span class="text-red">¥{{ fmt(o.unsettledProfit) }}</span>
-              </div>
+              <div class="handler-kpi-label">未结算 ({{ receiverData.total.unpaidCount }} 笔)</div>
             </div>
           </div>
 
@@ -476,32 +407,6 @@
             </div>
           </div>
           <div v-else class="week-empty">该接单人名下无未结算订单</div>
-
-          <div class="receiver-settlement-history">
-            <h4 class="sub-section-title">利润结算记录 ({{ receiverData.settlements?.length || 0 }})</h4>
-            <div v-if="receiverData.settlements && receiverData.settlements.length > 0" class="week-orders">
-              <div class="week-order-header receiver-settlement-7col">
-                <span>时间</span><span>状态</span><span>订单数</span><span>结算金额</span><span>实收利润快照</span><span>备注</span><span>操作</span>
-              </div>
-              <div v-for="s in receiverData.settlements" :key="s.id" class="week-order-row receiver-settlement-7col">
-                <span>{{ formatDateTime(s.createdAt) }}</span>
-                <span>
-                  <el-tag :type="s.status === 'active' ? 'success' : 'info'" size="small" effect="plain">
-                    {{ s.status === 'active' ? '有效' : '已作废' }}
-                  </el-tag>
-                </span>
-                <span>{{ s.itemCount || s.orderCount || 0 }} 单</span>
-                <span class="text-green">¥{{ fmt(s.amount) }}</span>
-                <span>¥{{ fmt(s.actualProfitSnapshot) }}</span>
-                <span class="week-order-title">{{ s.note || '—' }}</span>
-                <span>
-                  <el-button v-if="s.status === 'active'" text size="small" type="danger" @click="voidReceiverSettlement(s.id)">作废</el-button>
-                  <span v-else>—</span>
-                </span>
-              </div>
-            </div>
-            <div v-else class="week-empty">暂无利润结算记录</div>
-          </div>
         </template>
 
         <div v-else class="handler-placeholder">
@@ -527,7 +432,6 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { PieChart, BarChart, LineChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
-import { ElMessage, ElMessageBox } from 'element-plus'
 
 use([CanvasRenderer, PieChart, BarChart, LineChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 
@@ -586,7 +490,6 @@ function onGradYearChanged(val) {
 async function loadStats() {
   if (!currentUser.value || !currentUser.value.id) return
   data.value = await api.getStats(getStatsParams())
-  if (selectedReceiver.value) await loadReceiverDetail()
 }
 
 const yearSelectRef = ref(null)
@@ -713,11 +616,10 @@ async function changeWeek(dir) {
 const selectedReceiver = ref('')
 const receiverData = ref(null)
 const receiverUnsettledTypeFilter = ref('all')
-const selectedReceiverProfitOrderIds = ref([])
 
 const receiverList = computed(() => {
   if (!data.value) return []
-  return data.value.allReceivers || data.value.byReceiver.map(r => r.name)
+  return data.value.byReceiver.map(r => r.name)
 })
 
 const receiverUnsettledOrders = computed(() => {
@@ -746,115 +648,15 @@ const receiverUnsettledSummary = computed(() => {
   }, { totalAmount: 0, paidAmount: 0, unpaidAmount: 0 })
 })
 
-const receiverProfitOrders = computed(() => receiverData.value?.allOrders || [])
-
-const selectedReceiverSettlementAmount = computed(() => {
-  const selected = new Set(selectedReceiverProfitOrderIds.value)
-  return receiverProfitOrders.value.reduce((sum, order) => {
-    return selected.has(order.id) ? sum + (Number(order.unsettledProfit) || 0) : sum
-  }, 0)
-})
-
-function toggleReceiverProfitOrder(orderId) {
-  const current = selectedReceiverProfitOrderIds.value
-  if (current.includes(orderId)) {
-    selectedReceiverProfitOrderIds.value = current.filter(id => id !== orderId)
-  } else {
-    selectedReceiverProfitOrderIds.value = [...current, orderId]
-  }
-}
-
-function selectAllReceiverProfitOrders() {
-  selectedReceiverProfitOrderIds.value = receiverProfitOrders.value
-    .filter(order => (Number(order.unsettledProfit) || 0) > 0)
-    .map(order => order.id)
-}
-
-function clearReceiverProfitSelection() {
-  selectedReceiverProfitOrderIds.value = []
-}
-
-function getCurrentStatsPeriod() {
-  if (timeMode.value === 'month') {
-    const m = String(selectedMonth.value).padStart(2, '0')
-    const nextMonth = selectedMonth.value === 12 ? 1 : selectedMonth.value + 1
-    const nextYear = selectedMonth.value === 12 ? selectedYear.value + 1 : selectedYear.value
-    return {
-      periodStart: `${selectedYear.value}-${m}-01`,
-      periodEnd: `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`,
-    }
-  }
-  if (timeMode.value === 'year') {
-    return {
-      periodStart: `${selectedYear.value}-01-01`,
-      periodEnd: `${selectedYear.value + 1}-01-01`,
-    }
-  }
-  return { periodStart: '', periodEnd: '' }
-}
-
-async function createReceiverSettlement() {
-  if (!selectedReceiver.value || !currentUser.value?.id) return
-  if (selectedReceiverSettlementAmount.value <= 0) {
-    ElMessage.warning('请先选择有待结算利润的订单')
-    return
-  }
-  try {
-    await ElMessageBox.confirm(
-      `将为「${selectedReceiver.value}」结算 ${selectedReceiverProfitOrderIds.value.length} 单，金额 ¥${fmt(selectedReceiverSettlementAmount.value)}。确认后会生成利润结算记录。`,
-      '新增接单人利润结算',
-      { type: 'warning', confirmButtonText: '确认结算', cancelButtonText: '取消' }
-    )
-    const period = getCurrentStatsPeriod()
-    const result = await api.createReceiverProfitSettlement({
-      userId: currentUser.value.id,
-      receiver: selectedReceiver.value,
-      orderIds: selectedReceiverProfitOrderIds.value,
-      graduationYear: statsGradYear.value === 'all' ? 0 : statsGradYear.value,
-      ...period,
-    })
-    if (!result?.success) {
-      const errorTextMap = {
-        INVALID_PARAMS: '结算参数不完整',
-        NO_SETTLE_AMOUNT: '当前选中订单没有可结算利润',
-      }
-      ElMessage.error(errorTextMap[result?.error] || result?.error || '结算失败')
-      return
-    }
-    ElMessage.success(`已生成结算记录：¥${fmt(result.amount)}`)
-    clearReceiverProfitSelection()
-    await loadReceiverDetail()
-  } catch {}
-}
-
-async function voidReceiverSettlement(settlementId) {
-  if (!currentUser.value?.id) return
-  try {
-    await ElMessageBox.confirm(
-      '作废后该结算金额会重新计入待结算利润，历史记录会保留。确定作废？',
-      '作废利润结算',
-      { type: 'warning', confirmButtonText: '确认作废', cancelButtonText: '取消' }
-    )
-    const result = await api.voidReceiverProfitSettlement(currentUser.value.id, settlementId)
-    if (!result?.success) {
-      ElMessage.error(result?.error || '作废失败')
-      return
-    }
-    ElMessage.success('已作废结算记录')
-    await loadReceiverDetail()
-  } catch {}
-}
-
 async function loadReceiverDetail() {
   if (!selectedReceiver.value || !currentUser.value || !currentUser.value.id) {
     receiverData.value = null
     receiverUnsettledTypeFilter.value = 'all'
-    clearReceiverProfitSelection()
     return
   }
   receiverUnsettledTypeFilter.value = 'all'
-  clearReceiverProfitSelection()
-  receiverData.value = await api.getReceiverDetail({ ...getStatsParams(), receiver: selectedReceiver.value })
+  const gradYear = statsGradYear.value === 'all' ? null : statsGradYear.value
+  receiverData.value = await api.getReceiverDetail(currentUser.value.id, selectedReceiver.value, gradYear)
 }
 
 onMounted(async () => {
@@ -871,13 +673,6 @@ onMounted(async () => {
 })
 
 function fmt(n) { return (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) }
-
-function formatDateTime(value) {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16)
-  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`
-}
 
 const netProfit = computed(() => {
   if (!data.value) return 0
@@ -1231,9 +1026,6 @@ function rankChart(items) {
   gap: 12px;
   margin-bottom: 20px;
 }
-.receiver-kpi-row {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
 .handler-kpi {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
@@ -1244,10 +1036,6 @@ function rankChart(items) {
 .handler-kpi:nth-child(2) { background: #f0f9ff; border-color: #bae6fd; }
 .handler-kpi:nth-child(3) { background: #ecfdf5; border-color: #a7f3d0; }
 .handler-kpi:nth-child(4) { background: #fff1f2; border-color: #fecdd3; }
-.receiver-kpi-row .handler-kpi:nth-child(5) { background: #fff7ed; border-color: #fed7aa; }
-.receiver-kpi-row .handler-kpi:nth-child(6) { background: #fef2f2; border-color: #fecaca; }
-.receiver-kpi-row .handler-kpi:nth-child(7) { background: #f0fdf4; border-color: #bbf7d0; }
-.receiver-kpi-row .handler-kpi:nth-child(8) { background: #fff1f2; border-color: #fecdd3; }
 .handler-kpi-val {
   font-size: 20px;
   font-weight: 700;
@@ -1444,35 +1232,6 @@ function rankChart(items) {
 .receiver-handler-5col {
   grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr !important;
 }
-.receiver-profit-detail,
-.receiver-settlement-history {
-  margin-bottom: 16px;
-}
-.receiver-profit-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.receiver-profit-selected {
-  font-size: 12px;
-  color: #475569;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 4px 8px;
-}
-.receiver-profit-table {
-  overflow-x: auto;
-}
-.receiver-profit-12col {
-  grid-template-columns: 48px 120px 220px 90px 90px 86px 86px 86px 86px 100px 100px 100px !important;
-  min-width: 1220px;
-}
-.receiver-settlement-7col {
-  grid-template-columns: 150px 80px 80px 110px 120px 1fr 80px !important;
-}
 .receiver-unsettled {
   margin-bottom: 8px;
 }
@@ -1526,10 +1285,6 @@ function rankChart(items) {
 
   .receiver-unsettled-summary {
     grid-template-columns: 1fr;
-  }
-
-  .receiver-profit-actions {
-    justify-content: flex-start;
   }
 }
 

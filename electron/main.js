@@ -751,61 +751,6 @@ function registerIpcHandlers() {
     `).get(syncUuid, userId)
   }
 
-  function toAmount(value) {
-    return Number(value) || 0
-  }
-
-  function getExpectedProfit(row) {
-    return toAmount(row.totalAmount) - toAmount(row.dispatchAmount) - toAmount(row.refundAmount)
-  }
-
-  function getActualProfit(row) {
-    return toAmount(row.paidAmount) - toAmount(row.handlerPaidAmount) - toAmount(row.refundAmount)
-  }
-
-  function buildStatsFilter(params = {}) {
-    const { userId, year, month, graduationYear } = params
-    const queryParams = { userId }
-    let dateFilter = ''
-    if (year && month) {
-      const m = String(month).padStart(2, '0')
-      const nextMonth = month === 12 ? 1 : month + 1
-      const nextYear = month === 12 ? year + 1 : year
-      const nm = String(nextMonth).padStart(2, '0')
-      dateFilter = ` AND createdAt >= @start AND createdAt < @end`
-      queryParams.start = `${year}-${m}-01`
-      queryParams.end = `${nextYear}-${nm}-01`
-    } else if (year) {
-      dateFilter = ` AND createdAt >= @start AND createdAt < @end`
-      queryParams.start = `${year}-01-01`
-      queryParams.end = `${year + 1}-01-01`
-    }
-
-    let gradFilter = ''
-    if (graduationYear && graduationYear > 0) {
-      gradFilter = ' AND graduationYear = @graduationYear'
-      queryParams.graduationYear = graduationYear
-    }
-
-    return {
-      queryParams,
-      dateFilter,
-      gradFilter,
-      where: ' WHERE userId = @userId' + dateFilter + gradFilter,
-    }
-  }
-
-  function getSettlementBySyncUuid(syncUuid, userId) {
-    return db.prepare('SELECT * FROM ReceiverProfitSettlements WHERE syncUuid = ? AND userId = ?').get(syncUuid, userId)
-  }
-
-  function getSettlementWithItemsById(id) {
-    const settlement = db.prepare('SELECT * FROM ReceiverProfitSettlements WHERE id = ?').get(id)
-    if (!settlement) return null
-    settlement.items = db.prepare('SELECT * FROM ReceiverProfitSettlementItems WHERE settlementId = ? ORDER BY id ASC').all(id)
-    return settlement
-  }
-
   function insertSyncEvent({ userId, entityType, entityUuid, action, payload, summaryType, summaryLabel = '', summaryExtra = '' }) {
     const profile = getUserSyncProfile(userId)
     if (!profile?.syncScope) return
@@ -903,25 +848,6 @@ function registerIpcHandlers() {
     })
   }
 
-  function recordReceiverProfitSettlementSyncEvent(action, settlementRow) {
-    if (!settlementRow?.userId || !settlementRow?.syncUuid) return
-    const settlement = getSettlementWithItemsById(settlementRow.id)
-    if (!settlement) return
-    insertSyncEvent({
-      userId: settlement.userId,
-      entityType: 'receiverProfitSettlement',
-      entityUuid: settlement.syncUuid,
-      action,
-      summaryType: action === 'create' ? 'receiver_profit_settled' : 'receiver_profit_settlement_updated',
-      summaryLabel: settlement.receiver || '本人',
-      summaryExtra: `¥${toAmount(settlement.amount).toFixed(0)}`,
-      payload: {
-        settlement,
-        items: settlement.items || [],
-      },
-    })
-  }
-
   function buildPendingSyncSummary(userId) {
     const lastSyncAt = getSettingValue(getSyncSettingKey('lastSuccessAt'))
     const params = [userId, getSyncDeviceId()]
@@ -973,9 +899,6 @@ function registerIpcHandlers() {
           const attachLabel = attachmentNames.length > 0 ? attachmentNames.join('、') : row.summaryExtra
           pushGroup('attachment_changed', '附件变更', attachLabel || row.summaryLabel)
         }
-      } else if (row.entityType === 'receiverProfitSettlement') {
-        const title = row.action === 'create' ? '新增接单人利润结算' : '接单人利润结算变更'
-        pushGroup('receiver_profit_settlement', title, `${row.summaryLabel || '本人'} ${row.summaryExtra || ''}`.trim())
       }
     }
 
@@ -1259,123 +1182,11 @@ function registerIpcHandlers() {
     }
   }
 
-  function applyReceiverProfitSettlementEvent(event, userId) {
-    const payload = event.payload || {}
-    const settlement = payload.settlement
-    if (!settlement?.syncUuid) return
-
-    if (event.action === 'delete') {
-      const existing = getSettlementBySyncUuid(settlement.syncUuid, userId)
-      if (!existing) return
-      db.prepare('DELETE FROM ReceiverProfitSettlementItems WHERE settlementId = ?').run(existing.id)
-      db.prepare('DELETE FROM ReceiverProfitSettlements WHERE id = ? AND userId = ?').run(existing.id, userId)
-      return
-    }
-
-    const settlementData = {
-      userId,
-      receiver: settlement.receiver || '本人',
-      amount: toAmount(settlement.amount),
-      orderCount: Number(settlement.orderCount) || 0,
-      note: settlement.note || '',
-      status: settlement.status || 'active',
-      graduationYear: Number(settlement.graduationYear) || 0,
-      periodStart: settlement.periodStart || '',
-      periodEnd: settlement.periodEnd || '',
-      totalAmountSnapshot: toAmount(settlement.totalAmountSnapshot),
-      paidAmountSnapshot: toAmount(settlement.paidAmountSnapshot),
-      dispatchAmountSnapshot: toAmount(settlement.dispatchAmountSnapshot),
-      handlerPaidAmountSnapshot: toAmount(settlement.handlerPaidAmountSnapshot),
-      refundAmountSnapshot: toAmount(settlement.refundAmountSnapshot),
-      expectedProfitSnapshot: toAmount(settlement.expectedProfitSnapshot),
-      actualProfitSnapshot: toAmount(settlement.actualProfitSnapshot),
-      createdAt: settlement.createdAt || nowIso(),
-      voidedAt: settlement.voidedAt || null,
-      syncUuid: settlement.syncUuid,
-    }
-    const existing = getSettlementBySyncUuid(settlement.syncUuid, userId)
-    let settlementId = existing?.id
-    if (existing) {
-      db.prepare(`
-        UPDATE ReceiverProfitSettlements SET
-          receiver = @receiver,
-          amount = @amount,
-          orderCount = @orderCount,
-          note = @note,
-          status = @status,
-          graduationYear = @graduationYear,
-          periodStart = @periodStart,
-          periodEnd = @periodEnd,
-          totalAmountSnapshot = @totalAmountSnapshot,
-          paidAmountSnapshot = @paidAmountSnapshot,
-          dispatchAmountSnapshot = @dispatchAmountSnapshot,
-          handlerPaidAmountSnapshot = @handlerPaidAmountSnapshot,
-          refundAmountSnapshot = @refundAmountSnapshot,
-          expectedProfitSnapshot = @expectedProfitSnapshot,
-          actualProfitSnapshot = @actualProfitSnapshot,
-          createdAt = @createdAt,
-          voidedAt = @voidedAt
-        WHERE id = @id AND userId = @userId
-      `).run({ ...settlementData, id: settlementId })
-      db.prepare('DELETE FROM ReceiverProfitSettlementItems WHERE settlementId = ?').run(settlementId)
-    } else {
-      const result = db.prepare(`
-        INSERT INTO ReceiverProfitSettlements (
-          userId, receiver, amount, orderCount, note, status, graduationYear, periodStart, periodEnd,
-          totalAmountSnapshot, paidAmountSnapshot, dispatchAmountSnapshot, handlerPaidAmountSnapshot,
-          refundAmountSnapshot, expectedProfitSnapshot, actualProfitSnapshot, createdAt, voidedAt, syncUuid
-        ) VALUES (
-          @userId, @receiver, @amount, @orderCount, @note, @status, @graduationYear, @periodStart, @periodEnd,
-          @totalAmountSnapshot, @paidAmountSnapshot, @dispatchAmountSnapshot, @handlerPaidAmountSnapshot,
-          @refundAmountSnapshot, @expectedProfitSnapshot, @actualProfitSnapshot, @createdAt, @voidedAt, @syncUuid
-        )
-      `).run(settlementData)
-      settlementId = Number(result.lastInsertRowid)
-    }
-
-    const insertItem = db.prepare(`
-      INSERT INTO ReceiverProfitSettlementItems (
-        settlementId, orderId, orderSyncUuid, orderCode, orderTitle, orderType, handler,
-        totalAmount, paidAmount, dispatchAmount, handlerPaidAmount, refundAmount,
-        expectedProfit, actualProfit, previouslySettledAmount, settledAmount, createdAt, syncUuid
-      ) VALUES (
-        @settlementId, @orderId, @orderSyncUuid, @orderCode, @orderTitle, @orderType, @handler,
-        @totalAmount, @paidAmount, @dispatchAmount, @handlerPaidAmount, @refundAmount,
-        @expectedProfit, @actualProfit, @previouslySettledAmount, @settledAmount, @createdAt, @syncUuid
-      )
-    `)
-    for (const item of Array.isArray(payload.items) ? payload.items : []) {
-      const orderSyncUuid = item.orderSyncUuid || ''
-      const localOrder = orderSyncUuid ? getOrderBySyncUuid(orderSyncUuid, userId) : null
-      insertItem.run({
-        settlementId,
-        orderId: localOrder?.id || null,
-        orderSyncUuid,
-        orderCode: item.orderCode || localOrder?.orderCode || '',
-        orderTitle: item.orderTitle || localOrder?.title || '',
-        orderType: item.orderType || localOrder?.orderType || '',
-        handler: item.handler || localOrder?.handler || '',
-        totalAmount: toAmount(item.totalAmount),
-        paidAmount: toAmount(item.paidAmount),
-        dispatchAmount: toAmount(item.dispatchAmount),
-        handlerPaidAmount: toAmount(item.handlerPaidAmount),
-        refundAmount: toAmount(item.refundAmount),
-        expectedProfit: toAmount(item.expectedProfit),
-        actualProfit: toAmount(item.actualProfit),
-        previouslySettledAmount: toAmount(item.previouslySettledAmount),
-        settledAmount: toAmount(item.settledAmount),
-        createdAt: item.createdAt || nowIso(),
-        syncUuid: item.syncUuid || makeSyncId(),
-      })
-    }
-  }
-
   function applyIncomingSyncEvent(event, userId, syncDir) {
     const applyTxn = db.transaction(() => {
       if (event.entityType === 'order') applyOrderEvent(event, userId)
       else if (event.entityType === 'revision') applyRevisionEvent(event, userId)
       else if (event.entityType === 'feedback') applyFeedbackEvent(event, userId, syncDir)
-      else if (event.entityType === 'receiverProfitSettlement') applyReceiverProfitSettlementEvent(event, userId)
       db.prepare('INSERT OR REPLACE INTO SyncAppliedEvents (eventId, appliedAt) VALUES (?, ?)').run(event.eventId, nowIso())
     })
     applyTxn()
@@ -1430,11 +1241,6 @@ function registerIpcHandlers() {
           created += 1
         }
       }
-    }
-    const settlements = db.prepare('SELECT * FROM ReceiverProfitSettlements WHERE userId = ? ORDER BY id ASC').all(userId)
-    for (const settlement of settlements) {
-      recordReceiverProfitSettlementSyncEvent('create', settlement)
-      created += 1
     }
     return created
   }
@@ -1690,8 +1496,6 @@ function registerIpcHandlers() {
   ipcMain.handle('reset:all', (_, superPassword) => {
     if (superPassword !== 'xiaozhantuwen666') return { success: false, error: '超级密码错误' }
     db.exec(`
-      DELETE FROM ReceiverProfitSettlementItems;
-      DELETE FROM ReceiverProfitSettlements;
       DELETE FROM FeedbackItems;
       DELETE FROM Revisions;
       DELETE FROM Orders;
@@ -1819,13 +1623,6 @@ function registerIpcHandlers() {
       FROM Orders${w} GROUP BY name ORDER BY count DESC LIMIT 10
     `).all(dateParams)
 
-    const allReceivers = db.prepare(`
-      SELECT CASE WHEN receiver = '' THEN '本人' ELSE receiver END as name
-      FROM Orders${w}
-      GROUP BY name
-      ORDER BY name ASC
-    `).all(dateParams).map(row => row.name)
-
     const byHandler = db.prepare(`
       SELECT CASE WHEN handler = '' THEN '本人' ELSE handler END as name,
         COUNT(*) as count, SUM(totalAmount) as revenue
@@ -1883,7 +1680,6 @@ function registerIpcHandlers() {
         unpaidCount: handlerPayment.unpaidCount || 0,
         unpaidAmount: handlerPayment.unpaidAmount || 0,
       },
-      allReceivers,
       byType,
       byStatus,
       byReceiver,
@@ -1966,285 +1762,53 @@ function registerIpcHandlers() {
     }
   })
 
-  ipcMain.handle('stats:receiverDetail', (_, paramsOrUserId, receiverName, graduationYear) => {
-    const params = typeof paramsOrUserId === 'object'
-      ? (paramsOrUserId || {})
-      : { userId: paramsOrUserId, receiver: receiverName, graduationYear }
-    const { userId, year, month } = params
-    const receiverLabel = params.receiver || params.receiverName || '本人'
-    const receiver = receiverLabel === '本人' ? '' : receiverLabel
-    const { queryParams, dateFilter, gradFilter } = buildStatsFilter({
-      userId,
-      year,
-      month,
-      graduationYear: params.graduationYear,
-    })
-    queryParams.receiver = receiver
-    const receiverCond = ` AND ((@receiver = '' AND (o.receiver = '' OR o.receiver = '本人')) OR o.receiver = @receiver)`
-    const aliasDateFilter = dateFilter.replace(/createdAt/g, 'o.createdAt')
-    const aliasGradFilter = gradFilter.replace(/graduationYear/g, 'o.graduationYear')
+  ipcMain.handle('stats:receiverDetail', (_, userId, receiverName, graduationYear) => {
+    const receiver = receiverName === '本人' ? '' : receiverName
+    const gradCond = (graduationYear && graduationYear > 0) ? ' AND graduationYear = @graduationYear' : ''
 
     const allOrders = db.prepare(`
+      SELECT id, title, orderType, totalAmount, paidAmount, dispatchAmount, handlerPaidAmount,
+        CASE WHEN handler = '' THEN '本人' ELSE handler END as handler, createdAt
+      FROM Orders WHERE userId = @userId AND (receiver = @receiver OR (@receiver = '' AND receiver = ''))${gradCond}
+      ORDER BY createdAt DESC
+    `).all({ userId, receiver, graduationYear })
+
+    const totalStats = db.prepare(`
       SELECT
-        o.id,
-        o.syncUuid,
-        o.orderCode,
-        o.title,
-        o.orderType,
-        o.totalAmount,
-        o.paidAmount,
-        o.dispatchAmount,
-        o.handlerPaidAmount,
-        o.refundAmount,
-        CASE WHEN o.handler = '' THEN '本人' ELSE o.handler END as handler,
-        o.createdAt,
-        COALESCE(settled.settledAmount, 0) as settledAmount
-      FROM Orders o
-      LEFT JOIN (
-        SELECT i.orderSyncUuid, SUM(i.settledAmount) as settledAmount
-        FROM ReceiverProfitSettlementItems i
-        JOIN ReceiverProfitSettlements s ON s.id = i.settlementId
-        WHERE s.userId = @userId AND s.status = 'active'
-        GROUP BY i.orderSyncUuid
-      ) settled ON settled.orderSyncUuid = o.syncUuid
-      WHERE o.userId = @userId${receiverCond}${aliasDateFilter}${aliasGradFilter}
-      ORDER BY datetime(o.createdAt) DESC
-    `).all(queryParams).map(order => {
-      const expectedProfit = getExpectedProfit(order)
-      const actualProfit = getActualProfit(order)
-      const settledAmount = toAmount(order.settledAmount)
-      return {
-        ...order,
-        expectedProfit,
-        actualProfit,
-        unsettledProfit: Math.max(actualProfit - settledAmount, 0),
-        unpaidAmount: Math.max(toAmount(order.totalAmount) - toAmount(order.paidAmount), 0),
-      }
-    })
+        COUNT(*) as orderCount,
+        SUM(totalAmount) as totalAmount,
+        SUM(dispatchAmount) as totalDispatch,
+        SUM(paidAmount) as paidAmount,
+        SUM(CASE WHEN totalAmount > paidAmount THEN totalAmount - paidAmount ELSE 0 END) as unpaidAmount,
+        SUM(CASE WHEN totalAmount > 0 AND paidAmount >= totalAmount THEN 1 ELSE 0 END) as paidCount,
+        SUM(CASE WHEN totalAmount > 0 AND paidAmount < totalAmount THEN 1 ELSE 0 END) as unpaidCount
+      FROM Orders WHERE userId = @userId AND (receiver = @receiver OR (@receiver = '' AND receiver = ''))${gradCond}
+    `).get({ userId, receiver, graduationYear })
 
-    const total = allOrders.reduce((summary, order) => {
-      summary.orderCount += 1
-      summary.totalAmount += toAmount(order.totalAmount)
-      summary.totalDispatch += toAmount(order.dispatchAmount)
-      summary.handlerPaidAmount += toAmount(order.handlerPaidAmount)
-      summary.refundAmount += toAmount(order.refundAmount)
-      summary.paidAmount += toAmount(order.paidAmount)
-      summary.unpaidAmount += toAmount(order.unpaidAmount)
-      summary.expectedProfit += toAmount(order.expectedProfit)
-      summary.actualProfit += toAmount(order.actualProfit)
-      summary.settledProfit += toAmount(order.settledAmount)
-      summary.unsettledProfit += toAmount(order.unsettledProfit)
-      if (toAmount(order.totalAmount) > 0 && toAmount(order.paidAmount) >= toAmount(order.totalAmount)) summary.paidCount += 1
-      if (toAmount(order.totalAmount) > 0 && toAmount(order.paidAmount) < toAmount(order.totalAmount)) summary.unpaidCount += 1
-      return summary
-    }, {
-      orderCount: 0,
-      totalAmount: 0,
-      totalDispatch: 0,
-      handlerPaidAmount: 0,
-      refundAmount: 0,
-      paidAmount: 0,
-      unpaidAmount: 0,
-      expectedProfit: 0,
-      actualProfit: 0,
-      settledProfit: 0,
-      unsettledProfit: 0,
-      paidCount: 0,
-      unpaidCount: 0,
-    })
-
-    const handlerMap = new Map()
-    for (const order of allOrders) {
-      const name = order.handler || '本人'
-      if (!handlerMap.has(name)) {
-        handlerMap.set(name, { name, orderCount: 0, totalDispatch: 0, paidAmount: 0, unpaidAmount: 0 })
-      }
-      const row = handlerMap.get(name)
-      row.orderCount += 1
-      row.totalDispatch += toAmount(order.dispatchAmount)
-      row.paidAmount += toAmount(order.handlerPaidAmount)
-      row.unpaidAmount += Math.max(toAmount(order.dispatchAmount) - toAmount(order.handlerPaidAmount), 0)
-    }
-
-    const settlementDateFilter = dateFilter.replace(/createdAt/g, 's.createdAt')
-    const settlementGradFilter = gradFilter.replace(/graduationYear/g, 's.graduationYear')
-    const settlements = db.prepare(`
-      SELECT s.*, COUNT(i.id) as itemCount
-      FROM ReceiverProfitSettlements s
-      LEFT JOIN ReceiverProfitSettlementItems i ON i.settlementId = s.id
-      WHERE s.userId = @userId AND ((@receiver = '' AND (s.receiver = '' OR s.receiver = '本人')) OR s.receiver = @receiver)${settlementDateFilter}${settlementGradFilter}
-      GROUP BY s.id
-      ORDER BY datetime(s.createdAt) DESC
-    `).all(queryParams)
+    const byHandler = db.prepare(`
+      SELECT
+        CASE WHEN handler = '' THEN '本人' ELSE handler END as name,
+        COUNT(*) as orderCount,
+        SUM(dispatchAmount) as totalDispatch,
+        SUM(handlerPaidAmount) as paidAmount,
+        SUM(CASE WHEN dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount
+      FROM Orders WHERE userId = @userId AND (receiver = @receiver OR (@receiver = '' AND receiver = ''))${gradCond}
+      GROUP BY name ORDER BY orderCount DESC
+    `).all({ userId, receiver, graduationYear })
 
     return {
       allOrders,
-      total,
-      byHandler: Array.from(handlerMap.values()).sort((a, b) => b.orderCount - a.orderCount),
-      settlements,
+      total: {
+        orderCount: totalStats.orderCount || 0,
+        totalAmount: totalStats.totalAmount || 0,
+        totalDispatch: totalStats.totalDispatch || 0,
+        paidAmount: totalStats.paidAmount || 0,
+        unpaidAmount: totalStats.unpaidAmount || 0,
+        paidCount: totalStats.paidCount || 0,
+        unpaidCount: totalStats.unpaidCount || 0,
+      },
+      byHandler,
     }
-  })
-
-  ipcMain.handle('receiverProfitSettlements:create', (_, params = {}) => {
-    const userId = Number(params.userId)
-    const receiverLabel = params.receiver || '本人'
-    const receiver = receiverLabel === '本人' ? '' : receiverLabel
-    const orderIds = Array.isArray(params.orderIds)
-      ? [...new Set(params.orderIds.map(id => Number(id)).filter(Boolean))]
-      : []
-    if (!userId || orderIds.length === 0) return { success: false, error: 'INVALID_PARAMS' }
-
-    const placeholders = orderIds.map(() => '?').join(',')
-    const rows = db.prepare(`
-      SELECT
-        o.*,
-        COALESCE(settled.settledAmount, 0) as settledAmount
-      FROM Orders o
-      LEFT JOIN (
-        SELECT i.orderSyncUuid, SUM(i.settledAmount) as settledAmount
-        FROM ReceiverProfitSettlementItems i
-        JOIN ReceiverProfitSettlements s ON s.id = i.settlementId
-        WHERE s.userId = ? AND s.status = 'active'
-        GROUP BY i.orderSyncUuid
-      ) settled ON settled.orderSyncUuid = o.syncUuid
-      WHERE o.userId = ?
-        AND o.id IN (${placeholders})
-        AND ((? = '' AND (o.receiver = '' OR o.receiver = '本人')) OR o.receiver = ?)
-      ORDER BY datetime(o.createdAt) ASC
-    `).all(userId, userId, ...orderIds, receiver, receiver)
-
-    const candidates = rows.map(order => {
-      const expectedProfit = getExpectedProfit(order)
-      const actualProfit = getActualProfit(order)
-      const previouslySettledAmount = toAmount(order.settledAmount)
-      return {
-        order,
-        expectedProfit,
-        actualProfit,
-        previouslySettledAmount,
-        availableProfit: Math.max(actualProfit - previouslySettledAmount, 0),
-      }
-    }).filter(item => item.availableProfit > 0)
-
-    const availableAmount = candidates.reduce((sum, item) => sum + item.availableProfit, 0)
-    const requestedAmount = toAmount(params.amount)
-    let remainingAmount = requestedAmount > 0 ? Math.min(requestedAmount, availableAmount) : availableAmount
-    if (remainingAmount <= 0) return { success: false, error: 'NO_SETTLE_AMOUNT' }
-
-    const txn = db.transaction(() => {
-      const items = []
-      for (const item of candidates) {
-        if (remainingAmount <= 0) break
-        const settledAmount = Math.min(item.availableProfit, remainingAmount)
-        if (settledAmount <= 0) continue
-        remainingAmount -= settledAmount
-        items.push({ ...item, settledAmount })
-      }
-
-      const snapshot = items.reduce((summary, item) => {
-        const order = item.order
-        summary.amount += item.settledAmount
-        summary.totalAmount += toAmount(order.totalAmount)
-        summary.paidAmount += toAmount(order.paidAmount)
-        summary.dispatchAmount += toAmount(order.dispatchAmount)
-        summary.handlerPaidAmount += toAmount(order.handlerPaidAmount)
-        summary.refundAmount += toAmount(order.refundAmount)
-        summary.expectedProfit += item.expectedProfit
-        summary.actualProfit += item.actualProfit
-        return summary
-      }, {
-        amount: 0,
-        totalAmount: 0,
-        paidAmount: 0,
-        dispatchAmount: 0,
-        handlerPaidAmount: 0,
-        refundAmount: 0,
-        expectedProfit: 0,
-        actualProfit: 0,
-      })
-
-      const result = db.prepare(`
-        INSERT INTO ReceiverProfitSettlements (
-          userId, receiver, amount, orderCount, note, status, graduationYear, periodStart, periodEnd,
-          totalAmountSnapshot, paidAmountSnapshot, dispatchAmountSnapshot, handlerPaidAmountSnapshot,
-          refundAmountSnapshot, expectedProfitSnapshot, actualProfitSnapshot, createdAt, syncUuid
-        ) VALUES (
-          @userId, @receiver, @amount, @orderCount, @note, 'active', @graduationYear, @periodStart, @periodEnd,
-          @totalAmountSnapshot, @paidAmountSnapshot, @dispatchAmountSnapshot, @handlerPaidAmountSnapshot,
-          @refundAmountSnapshot, @expectedProfitSnapshot, @actualProfitSnapshot, @createdAt, @syncUuid
-        )
-      `).run({
-        userId,
-        receiver: receiverLabel,
-        amount: snapshot.amount,
-        orderCount: items.length,
-        note: params.note || '',
-        graduationYear: Number(params.graduationYear) || 0,
-        periodStart: params.periodStart || '',
-        periodEnd: params.periodEnd || '',
-        totalAmountSnapshot: snapshot.totalAmount,
-        paidAmountSnapshot: snapshot.paidAmount,
-        dispatchAmountSnapshot: snapshot.dispatchAmount,
-        handlerPaidAmountSnapshot: snapshot.handlerPaidAmount,
-        refundAmountSnapshot: snapshot.refundAmount,
-        expectedProfitSnapshot: snapshot.expectedProfit,
-        actualProfitSnapshot: snapshot.actualProfit,
-        createdAt: nowIso(),
-        syncUuid: makeSyncId(),
-      })
-      const settlementId = Number(result.lastInsertRowid)
-      const insertItem = db.prepare(`
-        INSERT INTO ReceiverProfitSettlementItems (
-          settlementId, orderId, orderSyncUuid, orderCode, orderTitle, orderType, handler,
-          totalAmount, paidAmount, dispatchAmount, handlerPaidAmount, refundAmount,
-          expectedProfit, actualProfit, previouslySettledAmount, settledAmount, createdAt, syncUuid
-        ) VALUES (
-          @settlementId, @orderId, @orderSyncUuid, @orderCode, @orderTitle, @orderType, @handler,
-          @totalAmount, @paidAmount, @dispatchAmount, @handlerPaidAmount, @refundAmount,
-          @expectedProfit, @actualProfit, @previouslySettledAmount, @settledAmount, @createdAt, @syncUuid
-        )
-      `)
-      for (const item of items) {
-        const order = item.order
-        insertItem.run({
-          settlementId,
-          orderId: order.id,
-          orderSyncUuid: order.syncUuid || '',
-          orderCode: order.orderCode || '',
-          orderTitle: order.title || '',
-          orderType: order.orderType || '',
-          handler: order.handler || '',
-          totalAmount: toAmount(order.totalAmount),
-          paidAmount: toAmount(order.paidAmount),
-          dispatchAmount: toAmount(order.dispatchAmount),
-          handlerPaidAmount: toAmount(order.handlerPaidAmount),
-          refundAmount: toAmount(order.refundAmount),
-          expectedProfit: item.expectedProfit,
-          actualProfit: item.actualProfit,
-          previouslySettledAmount: item.previouslySettledAmount,
-          settledAmount: item.settledAmount,
-          createdAt: nowIso(),
-          syncUuid: makeSyncId(),
-        })
-      }
-      const settlementRow = db.prepare('SELECT * FROM ReceiverProfitSettlements WHERE id = ?').get(settlementId)
-      recordReceiverProfitSettlementSyncEvent('create', settlementRow)
-      return { settlementId, amount: snapshot.amount, orderCount: items.length }
-    })
-
-    return { success: true, ...txn() }
-  })
-
-  ipcMain.handle('receiverProfitSettlements:void', (_, userId, settlementId) => {
-    const id = Number(settlementId)
-    if (!userId || !id) return { success: false, error: 'INVALID_PARAMS' }
-    const settlement = db.prepare('SELECT * FROM ReceiverProfitSettlements WHERE id = ? AND userId = ?').get(id, userId)
-    if (!settlement) return { success: false, error: 'NOT_FOUND' }
-    if (settlement.status !== 'active') return { success: true }
-    db.prepare("UPDATE ReceiverProfitSettlements SET status = 'void', voidedAt = ? WHERE id = ? AND userId = ?").run(nowIso(), id, userId)
-    const updated = db.prepare('SELECT * FROM ReceiverProfitSettlements WHERE id = ?').get(id)
-    recordReceiverProfitSettlementSyncEvent('update', updated)
-    return { success: true }
   })
 
   // ===== Settings =====
@@ -2317,15 +1881,6 @@ function registerIpcHandlers() {
     const feedback = revisions.length > 0
       ? db.prepare(`SELECT fi.* FROM FeedbackItems fi JOIN Revisions r ON fi.revisionId = r.id JOIN Orders o ON r.orderId = o.id WHERE o.userId = ? ORDER BY fi.id ASC`).all(userId)
       : []
-    const receiverProfitSettlements = db.prepare('SELECT * FROM ReceiverProfitSettlements WHERE userId = ? ORDER BY id ASC').all(userId)
-    const receiverProfitSettlementItems = receiverProfitSettlements.length > 0
-      ? db.prepare(`
-        SELECT i.* FROM ReceiverProfitSettlementItems i
-        JOIN ReceiverProfitSettlements s ON s.id = i.settlementId
-        WHERE s.userId = ?
-        ORDER BY i.id ASC
-      `).all(userId)
-      : []
     const designTypes = db.prepare('SELECT * FROM DesignTypeDefs ORDER BY sortOrder ASC').all()
     const payload = {
       formatVersion: 1,
@@ -2336,8 +1891,6 @@ function registerIpcHandlers() {
         orders,
         revisions,
         feedback,
-        receiverProfitSettlements,
-        receiverProfitSettlementItems,
         designTypes,
       },
     }
@@ -2356,7 +1909,6 @@ function registerIpcHandlers() {
         orderCount: orders.length,
         revisionCount: revisions.length,
         feedbackCount: feedback.length,
-        settlementCount: receiverProfitSettlements.length,
       },
       exportRoot: payload.exportRoot,
     }
@@ -2384,8 +1936,6 @@ function registerIpcHandlers() {
     const importedOrders = Array.isArray(payload.data.orders) ? payload.data.orders : []
     const importedRevisions = Array.isArray(payload.data.revisions) ? payload.data.revisions : []
     const importedFeedback = Array.isArray(payload.data.feedback) ? payload.data.feedback : []
-    const importedReceiverProfitSettlements = Array.isArray(payload.data.receiverProfitSettlements) ? payload.data.receiverProfitSettlements : []
-    const importedReceiverProfitSettlementItems = Array.isArray(payload.data.receiverProfitSettlementItems) ? payload.data.receiverProfitSettlementItems : []
     const importedDesignTypes = Array.isArray(payload.data.designTypes) ? payload.data.designTypes : []
 
     const missingPaths = []
@@ -2393,8 +1943,6 @@ function registerIpcHandlers() {
     const importTxn = db.transaction(() => {
       db.prepare('UPDATE Users SET syncScope = ? WHERE id = ?').run(importedSyncScope, currentUserId)
       db.prepare('DELETE FROM SyncEvents WHERE userId = ?').run(currentUserId)
-      db.prepare('DELETE FROM ReceiverProfitSettlementItems WHERE settlementId IN (SELECT id FROM ReceiverProfitSettlements WHERE userId = ?)').run(currentUserId)
-      db.prepare('DELETE FROM ReceiverProfitSettlements WHERE userId = ?').run(currentUserId)
       const orderIds = db.prepare('SELECT id FROM Orders WHERE userId = ?').all(currentUserId).map(r => r.id)
       for (const oid of orderIds) {
         const revIds = db.prepare('SELECT id FROM Revisions WHERE orderId = ?').all(oid).map(r => r.id)
@@ -2512,79 +2060,6 @@ function registerIpcHandlers() {
         )
       }
 
-      const settlementMap = new Map()
-      const insertSettlement = db.prepare(`
-        INSERT INTO ReceiverProfitSettlements (
-          userId, receiver, amount, orderCount, note, status, graduationYear, periodStart, periodEnd,
-          totalAmountSnapshot, paidAmountSnapshot, dispatchAmountSnapshot, handlerPaidAmountSnapshot,
-          refundAmountSnapshot, expectedProfitSnapshot, actualProfitSnapshot, createdAt, voidedAt, syncUuid
-        ) VALUES (
-          @userId, @receiver, @amount, @orderCount, @note, @status, @graduationYear, @periodStart, @periodEnd,
-          @totalAmountSnapshot, @paidAmountSnapshot, @dispatchAmountSnapshot, @handlerPaidAmountSnapshot,
-          @refundAmountSnapshot, @expectedProfitSnapshot, @actualProfitSnapshot, @createdAt, @voidedAt, @syncUuid
-        )
-      `)
-      for (const settlement of importedReceiverProfitSettlements) {
-        const result = insertSettlement.run({
-          userId: currentUserId,
-          receiver: settlement.receiver || '本人',
-          amount: toAmount(settlement.amount),
-          orderCount: Number(settlement.orderCount) || 0,
-          note: settlement.note || '',
-          status: settlement.status || 'active',
-          graduationYear: Number(settlement.graduationYear) || 0,
-          periodStart: settlement.periodStart || '',
-          periodEnd: settlement.periodEnd || '',
-          totalAmountSnapshot: toAmount(settlement.totalAmountSnapshot),
-          paidAmountSnapshot: toAmount(settlement.paidAmountSnapshot),
-          dispatchAmountSnapshot: toAmount(settlement.dispatchAmountSnapshot),
-          handlerPaidAmountSnapshot: toAmount(settlement.handlerPaidAmountSnapshot),
-          refundAmountSnapshot: toAmount(settlement.refundAmountSnapshot),
-          expectedProfitSnapshot: toAmount(settlement.expectedProfitSnapshot),
-          actualProfitSnapshot: toAmount(settlement.actualProfitSnapshot),
-          createdAt: settlement.createdAt || new Date().toISOString(),
-          voidedAt: settlement.voidedAt || null,
-          syncUuid: settlement.syncUuid || makeSyncId(),
-        })
-        settlementMap.set(settlement.id, Number(result.lastInsertRowid))
-      }
-
-      const insertSettlementItem = db.prepare(`
-        INSERT INTO ReceiverProfitSettlementItems (
-          settlementId, orderId, orderSyncUuid, orderCode, orderTitle, orderType, handler,
-          totalAmount, paidAmount, dispatchAmount, handlerPaidAmount, refundAmount,
-          expectedProfit, actualProfit, previouslySettledAmount, settledAmount, createdAt, syncUuid
-        ) VALUES (
-          @settlementId, @orderId, @orderSyncUuid, @orderCode, @orderTitle, @orderType, @handler,
-          @totalAmount, @paidAmount, @dispatchAmount, @handlerPaidAmount, @refundAmount,
-          @expectedProfit, @actualProfit, @previouslySettledAmount, @settledAmount, @createdAt, @syncUuid
-        )
-      `)
-      for (const item of importedReceiverProfitSettlementItems) {
-        const mappedSettlementId = settlementMap.get(item.settlementId)
-        if (!mappedSettlementId) continue
-        insertSettlementItem.run({
-          settlementId: mappedSettlementId,
-          orderId: orderMap.get(item.orderId) || null,
-          orderSyncUuid: item.orderSyncUuid || '',
-          orderCode: item.orderCode || '',
-          orderTitle: item.orderTitle || '',
-          orderType: item.orderType || '',
-          handler: item.handler || '',
-          totalAmount: toAmount(item.totalAmount),
-          paidAmount: toAmount(item.paidAmount),
-          dispatchAmount: toAmount(item.dispatchAmount),
-          handlerPaidAmount: toAmount(item.handlerPaidAmount),
-          refundAmount: toAmount(item.refundAmount),
-          expectedProfit: toAmount(item.expectedProfit),
-          actualProfit: toAmount(item.actualProfit),
-          previouslySettledAmount: toAmount(item.previouslySettledAmount),
-          settledAmount: toAmount(item.settledAmount),
-          createdAt: item.createdAt || new Date().toISOString(),
-          syncUuid: item.syncUuid || makeSyncId(),
-        })
-      }
-
       db.prepare('INSERT OR REPLACE INTO Settings (key, value) VALUES (?, ?)').run('rootDirectory', normalizedNewRoot)
     })
 
@@ -2603,7 +2078,6 @@ function registerIpcHandlers() {
         orderCount: importedOrders.length,
         revisionCount: importedRevisions.length,
         feedbackCount: importedFeedback.length,
-        settlementCount: importedReceiverProfitSettlements.length,
       },
       missingPaths,
       missingOrderFolders,
