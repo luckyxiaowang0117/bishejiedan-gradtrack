@@ -401,9 +401,9 @@ function getOrderTypeSubDir(orderType) {
 
 const SPECIAL_SERVICE_OPTIONS = [
   { label: '开题报告', code: 'KR' },
-  { label: '图例绘制', code: 'SP' },
-  { label: 'PPT制作', code: 'SP' },
-  { label: '其他特殊服务', code: 'SP' },
+  { label: '图例绘制', code: 'FD' },
+  { label: 'PPT制作', code: 'PP' },
+  { label: '其他特殊服务', code: 'OS' },
 ]
 
 function getSpecialServiceCode(specialService) {
@@ -411,7 +411,9 @@ function getSpecialServiceCode(specialService) {
   const matched = SPECIAL_SERVICE_OPTIONS.find(option => service === option.label)
   if (matched) return matched.code
   if (service.includes('开题')) return 'KR'
-  return 'SP'
+  if (service.includes('图例') || service.toLowerCase().includes('figure')) return 'FD'
+  if (service.toLowerCase().includes('ppt') || service.toLowerCase().includes('powerpoint')) return 'PP'
+  return 'OS'
 }
 
 function getOrderServiceCode(order) {
@@ -422,12 +424,13 @@ function getOrderServiceCode(order) {
   if (type === 'design') return 'SD'
   if (type === 'reduction') return 'PR'
   if (type === 'special') return getSpecialServiceCode(order.specialService)
-  return 'SP'
+  return 'OS'
 }
 
 function generateNextOrderCode(userId, order, date = new Date()) {
   const database = getDb()
-  const year = Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getFullYear()
+  const fallbackYear = Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getFullYear()
+  const year = Number(order.graduationYear) || fallbackYear
   const serviceCode = getOrderServiceCode(order)
   const prefix = `${year}-${serviceCode}-`
   const rows = database.prepare(`
