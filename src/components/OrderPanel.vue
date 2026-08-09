@@ -4,6 +4,7 @@
     <header class="panel-header">
       <div class="header-left">
         <span class="id-badge">ID: #{{ order.id.toString().padStart(3, '0') }}</span>
+        <span v-if="order.orderCode" class="order-code-badge">{{ order.orderCode }}</span>
         <span
           class="order-type-badge"
           :style="{ color: orderTypeMeta.color, background: orderTypeMeta.color + '14' }"
@@ -120,6 +121,13 @@
           <template v-if="infoExpanded">
             <!-- Info grid row 2 -->
             <div class="info-grid info-grid-secondary">
+              <div class="info-cell">
+                <div class="cell-label">订单编号</div>
+                <div class="cell-value copyable" @click="copyText(order.orderCode)">
+                  {{ order.orderCode || '—' }}
+                  <el-icon v-if="order.orderCode" class="copy-icon" :size="12"><CopyDocument /></el-icon>
+                </div>
+              </div>
               <div class="info-cell">
                 <div class="cell-label">学生姓名</div>
                 <div class="cell-value copyable" @click="copyText(order.studentName)">
@@ -301,13 +309,22 @@ import DraftUpload from './DraftUpload.vue'
 const props = defineProps({
   order: Object,
   currentUser: Object,
+  defaultInfoExpanded: Boolean,
 })
 const projectFoldersRef = ref(null)
 const infoExpanded = ref(false)
 const emit = defineEmits(['updated', 'edit', 'deleted'])
 const api = window.electronAPI
 
-watch(() => props.order?.id, () => { infoExpanded.value = false })
+watch(
+  () => props.order?.id,
+  () => { infoExpanded.value = !!props.defaultInfoExpanded },
+  { immediate: true }
+)
+watch(
+  () => props.defaultInfoExpanded,
+  (value) => { infoExpanded.value = !!value }
+)
 
 const orderTypeMap = {
   thesis: { label: '毕设论文', color: '#6366f1' },
@@ -637,6 +654,7 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 .id-badge {
   font-size: 11px;
@@ -647,6 +665,16 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   border-radius: 6px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+.order-code-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  letter-spacing: 0;
 }
 .header-divider {
   width: 1px;
@@ -858,6 +886,7 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 .info-cell:nth-child(4)::before { background: #f472b6; }
 .info-cell:nth-child(5)::before { background: #38bdf8; }
 .info-cell:nth-child(6)::before { background: #a78bfa; }
+.info-cell:nth-child(7)::before { background: #fb7185; }
 
 .cell-label {
   font-size: 10px;

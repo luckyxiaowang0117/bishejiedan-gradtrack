@@ -15,7 +15,7 @@
       <el-input
         :model-value="search"
         @update:model-value="$emit('search-change', $event)"
-        placeholder="搜索题目/学校/姓名/昵称..."
+        placeholder="搜索编号/题目/学校/姓名/昵称..."
         prefix-icon="Search"
         clearable
         class="search-input"
@@ -258,6 +258,7 @@
                   :style="{ color: (orderTypeMap[order.orderType || 'thesis'] || {}).color, background: (orderTypeMap[order.orderType || 'thesis'] || {}).color + '14' }"
                 >{{ (orderTypeMap[order.orderType || 'thesis'] || {}).label }}</span>
               </div>
+              <div v-if="order.orderCode" class="card-order-code">{{ order.orderCode }}</div>
 
               <div v-if="order.university" class="card-school">
                 <el-icon :size="12"><OfficeBuilding /></el-icon>
@@ -1204,6 +1205,24 @@ function getStatus(order) {
   padding: 2px 8px;
   border-radius: 4px;
   white-space: nowrap;
+}
+
+.card-order-code {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4338ca;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0;
 }
 
 .card-school {

@@ -85,6 +85,7 @@
         :key="selectedOrder.id"
         :order="selectedOrder"
         :current-user="currentUser"
+        :default-info-expanded="orderInfoDefaultExpanded"
         @updated="loadOrders"
         @edit="openCreateModal"
         @deleted="onOrderDeleted"
@@ -100,7 +101,13 @@
     </main>
 
     <CreateOrderModal v-model:visible="showCreateModal" :order="editingOrder" @saved="onOrderSaved" />
-    <SettingsModal v-model:visible="showSettings" :current-user="currentUser" @reset="handleDataReset" @imported="handleMigrationImported" />
+    <SettingsModal
+      v-model:visible="showSettings"
+      :current-user="currentUser"
+      @reset="handleDataReset"
+      @imported="handleMigrationImported"
+      @order-info-default-change="orderInfoDefaultExpanded = $event"
+    />
   </div>
 </template>
 
@@ -172,6 +179,7 @@ onMounted(async () => {
     if (isLoggedIn.value) loadOrders()
   }, 60000)
   await loadSidebarWidthPreference()
+  await loadOrderInfoDefaultPreference()
   await checkAuth()
 })
 
@@ -212,6 +220,7 @@ const editingOrder = ref(null)
 const showSettings = ref(false)
 const showStats = ref(false)
 const syncBusy = ref(false)
+const orderInfoDefaultExpanded = ref(false)
 const prefsReady = ref(false)
 const isHydratingListState = ref(false)
 const sidebarWidth = ref(null)
@@ -245,6 +254,11 @@ async function loadSidebarWidthPreference() {
   } else {
     sidebarWidth.value = null
   }
+}
+
+async function loadOrderInfoDefaultPreference() {
+  const raw = await api.getSetting('orderInfoDefaultExpanded')
+  orderInfoDefaultExpanded.value = raw === '1'
 }
 
 async function persistSidebarWidth(width) {

@@ -41,6 +41,7 @@ function createTables() {
       major TEXT DEFAULT '',
       studentName TEXT DEFAULT '',
       wechatName TEXT DEFAULT '',
+      orderCode TEXT DEFAULT '',
       groupChatName TEXT DEFAULT '',
       specialService TEXT DEFAULT '',
       includesDesign INTEGER DEFAULT 0,
@@ -127,6 +128,7 @@ function runMigrations() {
   const newOrderCols = [
     { name: 'studentName', def: "TEXT DEFAULT ''" },
     { name: 'wechatName', def: "TEXT DEFAULT ''" },
+    { name: 'orderCode', def: "TEXT DEFAULT ''" },
     { name: 'groupChatName', def: "TEXT DEFAULT ''" },
     { name: 'includesDesign', def: "INTEGER DEFAULT 0" },
   ]
@@ -259,6 +261,7 @@ function runMigrations() {
   `)
 
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_sync_uuid ON Orders(syncUuid)")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_orders_user_order_code ON Orders(userId, orderCode)")
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_revisions_sync_uuid ON Revisions(syncUuid)")
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_sync_uuid ON FeedbackItems(syncUuid)")
   db.exec("CREATE INDEX IF NOT EXISTS idx_sync_events_user_device_created ON SyncEvents(userId, deviceId, createdAt)")

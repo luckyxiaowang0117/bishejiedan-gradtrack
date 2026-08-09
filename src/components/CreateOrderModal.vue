@@ -65,7 +65,7 @@
                 <el-input v-model="form.wechatName" placeholder="选填" />
               </el-form-item>
               <el-form-item label="群聊名称">
-                <el-input v-model="form.groupChatName" placeholder="选填" />
+                <el-input v-model="form.groupChatName" :placeholder="isEditing ? '选填' : '留空自动使用订单编号'" />
               </el-form-item>
             </div>
 
@@ -122,7 +122,9 @@
                 </el-select>
               </el-form-item>
               <el-form-item v-if="form.orderType === 'special'" label="服务项目">
-                <el-input v-model="form.specialService" placeholder="选填，例如：图例绘制 / PPT制作" />
+                <el-select v-model="form.specialService" placeholder="选择或手动填写" filterable allow-create style="width: 100%">
+                  <el-option v-for="s in specialServiceOptions" :key="s" :label="s" :value="s" />
+                </el-select>
               </el-form-item>
               <el-form-item v-if="form.orderType === 'translation'" label="是否有原文">
                 <el-switch
@@ -223,6 +225,8 @@ const orderTypes = [
   { key: 'reduction', label: '论文降重', desc: '降重与修改交付', color: '#10b981' },
   { key: 'special', label: '特殊订单', desc: '图例/PPT等灵活项目', color: '#ef4444' },
 ]
+
+const specialServiceOptions = ['开题报告', '图例绘制', 'PPT制作', '其他特殊服务']
 
 const graduationYearOptions = computed(() => {
   const current = getCurrentGraduationYear()

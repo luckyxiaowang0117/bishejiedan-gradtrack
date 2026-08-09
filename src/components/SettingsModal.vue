@@ -43,7 +43,24 @@
         </div>
       </div>
 
-      <!-- Section 3: Syncthing Sync -->
+      <!-- Section 3: Order Detail Preference -->
+      <div class="settings-section">
+        <div class="section-header">
+          <el-icon :size="18" color="#6366f1"><SetUp /></el-icon>
+          <div>
+            <div class="section-title">订单详情默认状态</div>
+            <div class="section-desc">控制打开订单时右侧详细信息默认折叠或展开</div>
+          </div>
+        </div>
+        <div class="preference-row">
+          <el-radio-group v-model="orderInfoDefaultExpanded" @change="handleOrderInfoDefaultChange">
+            <el-radio-button :value="false">默认折叠</el-radio-button>
+            <el-radio-button :value="true">默认展开</el-radio-button>
+          </el-radio-group>
+        </div>
+      </div>
+
+      <!-- Section 4: Syncthing Sync -->
       <div class="settings-section sync-section">
         <div class="section-header">
           <el-icon :size="18" color="#0f766e"><RefreshRight /></el-icon>
@@ -98,7 +115,7 @@
         </div>
       </div>
 
-      <!-- Section 4: Design Type Management -->
+      <!-- Section 5: Design Type Management -->
       <div class="settings-section">
         <div class="section-header">
           <el-icon :size="18" color="#8b5cf6"><SetUp /></el-icon>
@@ -149,7 +166,7 @@
           <el-icon><Plus /></el-icon> 添加设计类型
         </el-button>
       </div>
-      <!-- Section 5: Change Password -->
+      <!-- Section 6: Change Password -->
       <div class="settings-section">
         <div class="section-header">
           <el-icon :size="18" color="#f59e0b"><Lock /></el-icon>
@@ -175,7 +192,7 @@
         </el-form>
       </div>
 
-      <!-- Section 6: Data Migration -->
+      <!-- Section 7: Data Migration -->
       <div class="settings-section migration-section">
         <div class="section-header">
           <el-icon :size="18" color="#2563eb"><UploadFilled /></el-icon>
@@ -197,7 +214,7 @@
         </div>
       </div>
 
-      <!-- Section 7: Folder Migration -->
+      <!-- Section 8: Folder Migration -->
       <div class="settings-section folder-migration-section">
         <div class="section-header">
           <el-icon :size="18" color="#7c3aed"><FolderOpened /></el-icon>
@@ -216,7 +233,7 @@
         </div>
       </div>
 
-      <!-- Section 8: Reset Data -->
+      <!-- Section 9: Reset Data -->
       <div class="settings-section reset-section">
         <div class="section-header">
           <el-icon :size="18" color="#e11d48"><WarnTriangleFilled /></el-icon>
@@ -347,12 +364,13 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const props = defineProps({ visible: Boolean, currentUser: Object })
-const emit = defineEmits(['update:visible', 'reset', 'imported'])
+const emit = defineEmits(['update:visible', 'reset', 'imported', 'order-info-default-change'])
 
 const api = window.electronAPI
 const rootDir = ref('')
 const syncDir = ref('')
 const autoLaunch = ref(false)
+const orderInfoDefaultExpanded = ref(false)
 const designTypes = ref([])
 const migrationBusy = ref(false)
 const syncBusy = ref(false)
@@ -438,6 +456,7 @@ async function loadData() {
   const val = await api.getSetting('rootDirectory')
   rootDir.value = val || ''
   syncDir.value = await api.getSetting('syncDirectory') || ''
+  orderInfoDefaultExpanded.value = await api.getSetting('orderInfoDefaultExpanded') === '1'
   autoLaunch.value = await api.getAutoLaunch()
   const rows = await api.listDesignTypes()
   designTypes.value = rows.map(r => ({
@@ -459,6 +478,12 @@ watch(() => props.visible, (val) => {
 async function handleAutoLaunchChange(val) {
   await api.setAutoLaunch(val)
   ElMessage.success(val ? '已开启开机自启动' : '已关闭开机自启动')
+}
+
+async function handleOrderInfoDefaultChange(val) {
+  await api.setSetting('orderInfoDefaultExpanded', val ? '1' : '0')
+  emit('order-info-default-change', !!val)
+  ElMessage.success(val ? '订单详情将默认展开' : '订单详情将默认折叠')
 }
 
 async function persistPendingChanges() {
@@ -948,6 +973,13 @@ function convertToSubTypes(dt) {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 4px 0;
+}
+.preference-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
   padding: 4px 0;
 }
 .auto-launch-text {

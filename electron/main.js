@@ -168,6 +168,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   initDatabase()
+  backfillMissingOrderCodes()
   createWindow()
   createTray()
   registerIpcHandlers()
@@ -398,6 +399,74 @@ function getOrderTypeSubDir(orderType) {
   return typeSubDirs[orderType || 'thesis'] || '毕业设计'
 }
 
+const SPECIAL_SERVICE_OPTIONS = [
+  { label: '开题报告', code: 'KR' },
+  { label: '图例绘制', code: 'SP' },
+  { label: 'PPT制作', code: 'SP' },
+  { label: '其他特殊服务', code: 'SP' },
+]
+
+function getSpecialServiceCode(specialService) {
+  const service = String(specialService || '').trim()
+  const matched = SPECIAL_SERVICE_OPTIONS.find(option => service === option.label)
+  if (matched) return matched.code
+  if (service.includes('开题')) return 'KR'
+  return 'SP'
+}
+
+function getOrderServiceCode(order) {
+  const type = order.orderType || 'thesis'
+  if (type === 'thesis') return Number(order.includesDesign) ? 'BS' : 'BP'
+  if (type === 'format') return 'FM'
+  if (type === 'translation') return 'ET'
+  if (type === 'design') return 'SD'
+  if (type === 'reduction') return 'PR'
+  if (type === 'special') return getSpecialServiceCode(order.specialService)
+  return 'SP'
+}
+
+function generateNextOrderCode(userId, order, date = new Date()) {
+  const database = getDb()
+  const year = Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getFullYear()
+  const serviceCode = getOrderServiceCode(order)
+  const prefix = `${year}-${serviceCode}-`
+  const rows = database.prepare(`
+    SELECT orderCode FROM Orders
+    WHERE userId = ? AND orderCode LIKE ?
+  `).all(userId, `${prefix}%`)
+  const codePattern = new RegExp(`^${year}-${serviceCode}-(\\d{4})$`)
+  let maxSeq = 0
+  for (const row of rows) {
+    const match = String(row.orderCode || '').match(codePattern)
+    if (match) maxSeq = Math.max(maxSeq, Number(match[1]) || 0)
+  }
+
+  let nextSeq = maxSeq + 1
+  let nextCode = `${prefix}${String(nextSeq).padStart(4, '0')}`
+  while (database.prepare('SELECT id FROM Orders WHERE userId = ? AND orderCode = ?').get(userId, nextCode)) {
+    nextSeq += 1
+    nextCode = `${prefix}${String(nextSeq).padStart(4, '0')}`
+  }
+  return nextCode
+}
+
+function backfillMissingOrderCodes() {
+  const database = getDb()
+  const rows = database.prepare(`
+    SELECT * FROM Orders
+    WHERE userId IS NOT NULL AND (orderCode IS NULL OR orderCode = '')
+    ORDER BY userId ASC, datetime(createdAt) ASC, id ASC
+  `).all()
+  const update = database.prepare('UPDATE Orders SET orderCode = ? WHERE id = ?')
+  const txn = database.transaction(() => {
+    for (const order of rows) {
+      const code = generateNextOrderCode(order.userId, order, new Date(order.createdAt || Date.now()))
+      update.run(code, order.id)
+    }
+  })
+  txn()
+}
+
 function sanitizePathPart(str, fallback = '') {
   return (str || fallback || '').trim().replace(/[<>:"/\\|?*]/g, '_')
 }
@@ -580,6 +649,7 @@ function registerIpcHandlers() {
       major: '专业',
       studentName: '学生姓名',
       wechatName: '微信名',
+      orderCode: '订单编号',
       groupChatName: '微信群名',
       includesDesign: '是否含设计',
       receiver: '接单人',
@@ -932,6 +1002,7 @@ function registerIpcHandlers() {
       major: order.major || '',
       studentName: order.studentName || '',
       wechatName: order.wechatName || '',
+      orderCode: String(order.orderCode || '').trim(),
       groupChatName: order.groupChatName || '',
       includesDesign: Number(order.includesDesign) || 0,
       designType: order.designType || '',
@@ -959,6 +1030,13 @@ function registerIpcHandlers() {
       syncUuid: order.syncUuid,
     }
     const existingOrder = getOrderBySyncUuid(order.syncUuid, userId)
+    if (existingOrder && !orderData.orderCode) {
+      orderData.orderCode = existingOrder.orderCode || ''
+    }
+    if (!existingOrder && !orderData.orderCode) {
+      orderData.orderCode = generateNextOrderCode(userId, orderData, new Date(orderData.createdAt || Date.now()))
+      if (!orderData.groupChatName) orderData.groupChatName = orderData.orderCode
+    }
     if (existingOrder) {
       db.prepare(`
         UPDATE Orders SET
@@ -968,6 +1046,7 @@ function registerIpcHandlers() {
           major = @major,
           studentName = @studentName,
           wechatName = @wechatName,
+          orderCode = @orderCode,
           groupChatName = @groupChatName,
           includesDesign = @includesDesign,
           designType = @designType,
@@ -997,13 +1076,13 @@ function registerIpcHandlers() {
     } else {
       db.prepare(`
         INSERT INTO Orders (
-          userId, title, university, college, major, studentName, wechatName, groupChatName,
+          userId, title, university, college, major, studentName, wechatName, orderCode, groupChatName,
           includesDesign, designType, designSubType, designStatus, orderType, formatMode,
           hasOriginalText, specialService, receiver, handler, advisor, deadline, totalAmount, paidAmount,
           dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt,
           isDraftSubmitted, refundAmount, isHandlerPaid, handlerPaidAmount, syncUuid
         ) VALUES (
-          @userId, @title, @university, @college, @major, @studentName, @wechatName, @groupChatName,
+          @userId, @title, @university, @college, @major, @studentName, @wechatName, @orderCode, @groupChatName,
           @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode,
           @hasOriginalText, @specialService, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount,
           @dispatchAmount, @isDesignFinished, @folderPath, @graduationYear, @createdAt,
@@ -1884,11 +1963,13 @@ function registerIpcHandlers() {
 
       const orderMap = new Map()
       const insertOrder = db.prepare(`
-        INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, isDraftSubmitted, refundAmount, isHandlerPaid, handlerPaidAmount, syncUuid)
-        VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, @isDesignFinished, @folderPath, @graduationYear, @createdAt, @isDraftSubmitted, @refundAmount, @isHandlerPaid, @handlerPaidAmount, @syncUuid)
+        INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, orderCode, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, isDraftSubmitted, refundAmount, isHandlerPaid, handlerPaidAmount, syncUuid)
+        VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @orderCode, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, @isDesignFinished, @folderPath, @graduationYear, @createdAt, @isDraftSubmitted, @refundAmount, @isHandlerPaid, @handlerPaidAmount, @syncUuid)
       `)
       for (const o of importedOrders) {
         const mappedPath = replacePathPrefix(oldRoot, normalizedNewRoot, o.folderPath || '')
+        const createdAt = o.createdAt || new Date().toISOString()
+        const importedOrderCode = String(o.orderCode || '').trim() || generateNextOrderCode(currentUserId, o, new Date(createdAt))
         const result = insertOrder.run({
           userId: currentUserId,
           title: o.title || '',
@@ -1897,7 +1978,8 @@ function registerIpcHandlers() {
           major: o.major || '',
           studentName: o.studentName || '',
           wechatName: o.wechatName || '',
-          groupChatName: o.groupChatName || '',
+          orderCode: importedOrderCode,
+          groupChatName: o.groupChatName || importedOrderCode,
           specialService: o.specialService || '',
           includesDesign: Number(o.includesDesign) || 0,
           designType: o.designType || '',
@@ -1916,7 +1998,7 @@ function registerIpcHandlers() {
           isDesignFinished: Number(o.isDesignFinished) || 0,
           folderPath: mappedPath,
           graduationYear: Number(o.graduationYear) || 0,
-          createdAt: o.createdAt || new Date().toISOString(),
+          createdAt,
           isDraftSubmitted: Number(o.isDraftSubmitted) || 0,
           refundAmount: Number(o.refundAmount) || 0,
           isHandlerPaid: Number(o.isHandlerPaid) || 0,
@@ -2057,9 +2139,9 @@ function registerIpcHandlers() {
     }
 
     if (search) {
-      query += ` AND (o.title LIKE ? OR o.university LIKE ? OR o.college LIKE ? OR o.major LIKE ? OR o.advisor LIKE ? OR o.receiver LIKE ? OR o.handler LIKE ? OR o.studentName LIKE ? OR o.wechatName LIKE ? OR o.groupChatName LIKE ? OR o.specialService LIKE ?)`
+      query += ` AND (o.title LIKE ? OR o.university LIKE ? OR o.college LIKE ? OR o.major LIKE ? OR o.advisor LIKE ? OR o.receiver LIKE ? OR o.handler LIKE ? OR o.studentName LIKE ? OR o.wechatName LIKE ? OR o.orderCode LIKE ? OR o.groupChatName LIKE ? OR o.specialService LIKE ?)`
       const s = `%${search}%`
-      params.push(s, s, s, s, s, s, s, s, s, s, s)
+      params.push(s, s, s, s, s, s, s, s, s, s, s, s)
     }
 
     query += ` ORDER BY ${getOrderSortClause(sortMode)}`
@@ -2078,17 +2160,20 @@ function registerIpcHandlers() {
 
   ipcMain.handle('orders:create', (_, data) => {
     const stmt = db.prepare(`
-      INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, syncUuid)
-      VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, 0, @folderPath, @graduationYear, datetime('now'), @syncUuid)
+      INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, orderCode, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, syncUuid)
+      VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @orderCode, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, 0, @folderPath, @graduationYear, datetime('now'), @syncUuid)
     `)
     const now = new Date()
     const defaultGradYear = now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear()
-    const result = stmt.run({
+    const orderData = {
       designType: '', designSubType: '', designStatus: '',
       orderType: 'thesis', formatMode: '', hasOriginalText: 0, specialService: '',
       dispatchAmount: 0, graduationYear: defaultGradYear, syncUuid: makeSyncId(),
       ...data,
-    })
+    }
+    orderData.orderCode = String(orderData.orderCode || '').trim() || generateNextOrderCode(orderData.userId, orderData, now)
+    orderData.groupChatName = String(orderData.groupChatName || '').trim() || orderData.orderCode
+    const result = stmt.run(orderData)
     const orderRow = getOrderById(Number(result.lastInsertRowid))
     recordOrderSyncEvent('create', orderRow)
     return result.lastInsertRowid
