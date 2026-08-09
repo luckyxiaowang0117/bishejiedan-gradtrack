@@ -113,6 +113,52 @@ function createTables() {
       eventId TEXT PRIMARY KEY,
       appliedAt DATETIME DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS ReceiverProfitSettlements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER NOT NULL,
+      receiver TEXT NOT NULL DEFAULT '本人',
+      amount REAL DEFAULT 0,
+      orderCount INTEGER DEFAULT 0,
+      note TEXT DEFAULT '',
+      status TEXT DEFAULT 'active',
+      graduationYear INTEGER DEFAULT 0,
+      periodStart TEXT DEFAULT '',
+      periodEnd TEXT DEFAULT '',
+      totalAmountSnapshot REAL DEFAULT 0,
+      paidAmountSnapshot REAL DEFAULT 0,
+      dispatchAmountSnapshot REAL DEFAULT 0,
+      handlerPaidAmountSnapshot REAL DEFAULT 0,
+      refundAmountSnapshot REAL DEFAULT 0,
+      expectedProfitSnapshot REAL DEFAULT 0,
+      actualProfitSnapshot REAL DEFAULT 0,
+      createdAt DATETIME DEFAULT (datetime('now')),
+      voidedAt DATETIME,
+      syncUuid TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS ReceiverProfitSettlementItems (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      settlementId INTEGER NOT NULL,
+      orderId INTEGER,
+      orderSyncUuid TEXT DEFAULT '',
+      orderCode TEXT DEFAULT '',
+      orderTitle TEXT DEFAULT '',
+      orderType TEXT DEFAULT '',
+      handler TEXT DEFAULT '',
+      totalAmount REAL DEFAULT 0,
+      paidAmount REAL DEFAULT 0,
+      dispatchAmount REAL DEFAULT 0,
+      handlerPaidAmount REAL DEFAULT 0,
+      refundAmount REAL DEFAULT 0,
+      expectedProfit REAL DEFAULT 0,
+      actualProfit REAL DEFAULT 0,
+      previouslySettledAmount REAL DEFAULT 0,
+      settledAmount REAL DEFAULT 0,
+      createdAt DATETIME DEFAULT (datetime('now')),
+      syncUuid TEXT,
+      FOREIGN KEY (settlementId) REFERENCES ReceiverProfitSettlements(id)
+    );
   `)
   runMigrations()
   seedDesignTypes()
@@ -264,6 +310,10 @@ function runMigrations() {
   db.exec("CREATE INDEX IF NOT EXISTS idx_orders_user_order_code ON Orders(userId, orderCode)")
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_revisions_sync_uuid ON Revisions(syncUuid)")
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_sync_uuid ON FeedbackItems(syncUuid)")
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_receiver_profit_settlements_sync_uuid ON ReceiverProfitSettlements(syncUuid)")
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_receiver_profit_items_sync_uuid ON ReceiverProfitSettlementItems(syncUuid)")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_receiver_profit_settlements_user_receiver ON ReceiverProfitSettlements(userId, receiver, status)")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_receiver_profit_items_order_sync ON ReceiverProfitSettlementItems(orderSyncUuid)")
   db.exec("CREATE INDEX IF NOT EXISTS idx_sync_events_user_device_created ON SyncEvents(userId, deviceId, createdAt)")
   db.exec("CREATE INDEX IF NOT EXISTS idx_sync_events_scope_device_created ON SyncEvents(syncScope, deviceId, createdAt)")
   db.exec("CREATE INDEX IF NOT EXISTS idx_sync_events_exported ON SyncEvents(exportedAt)")

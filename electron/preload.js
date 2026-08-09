@@ -18,7 +18,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getStats: (params) => ipcRenderer.invoke('stats:getSummary', params),
   getStatsYears: (userId) => ipcRenderer.invoke('stats:getYears', userId),
   getHandlerDetail: (userId, handler, weekOffset, graduationYear) => ipcRenderer.invoke('stats:handlerDetail', userId, handler, weekOffset, graduationYear),
-  getReceiverDetail: (userId, receiver, graduationYear) => ipcRenderer.invoke('stats:receiverDetail', userId, receiver, graduationYear),
+  getReceiverDetail: (paramsOrUserId, receiver, graduationYear) => ipcRenderer.invoke('stats:receiverDetail', paramsOrUserId, receiver, graduationYear),
+  createReceiverProfitSettlement: (params) => ipcRenderer.invoke('receiverProfitSettlements:create', params),
+  voidReceiverProfitSettlement: (userId, settlementId) => ipcRenderer.invoke('receiverProfitSettlements:void', userId, settlementId),
 
   // Settings
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),
