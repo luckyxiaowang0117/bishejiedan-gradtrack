@@ -43,7 +43,34 @@
         </div>
       </div>
 
-      <!-- Section 3: Order Detail Preference -->
+      <!-- Section 3: Privacy Protection -->
+      <div class="settings-section privacy-section">
+        <div class="section-header">
+          <el-icon :size="18" color="#4f46e5"><Lock /></el-icon>
+          <div>
+            <div class="section-title">隐私保护</div>
+            <div class="section-desc">保留账号记忆，但进入主界面前按需验证当前账号密码</div>
+          </div>
+        </div>
+        <div class="privacy-options">
+          <div class="privacy-row">
+            <div>
+              <div class="privacy-title">启动时验证密码</div>
+              <div class="privacy-desc">开机自启或手动启动后，需要输入当前账号密码才能进入主界面</div>
+            </div>
+            <el-switch v-model="requirePasswordOnStartup" @change="handlePrivacySettingChange('requirePasswordOnStartup', $event)" />
+          </div>
+          <div class="privacy-row">
+            <div>
+              <div class="privacy-title">后台恢复时验证密码</div>
+              <div class="privacy-desc">软件隐藏到后台后，通过托盘、桌面快捷方式或开始菜单重新打开时需要输入密码</div>
+            </div>
+            <el-switch v-model="requirePasswordOnTrayRestore" @change="handlePrivacySettingChange('requirePasswordOnTrayRestore', $event)" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Order Detail Preference -->
       <div class="settings-section">
         <div class="section-header">
           <el-icon :size="18" color="#6366f1"><SetUp /></el-icon>
@@ -60,7 +87,7 @@
         </div>
       </div>
 
-      <!-- Section 4: Syncthing Sync -->
+      <!-- Section 5: Syncthing Sync -->
       <div class="settings-section sync-section">
         <div class="section-header">
           <el-icon :size="18" color="#0f766e"><RefreshRight /></el-icon>
@@ -115,7 +142,7 @@
         </div>
       </div>
 
-      <!-- Section 5: Design Type Management -->
+      <!-- Section 6: Design Type Management -->
       <div class="settings-section">
         <div class="section-header">
           <el-icon :size="18" color="#8b5cf6"><SetUp /></el-icon>
@@ -166,7 +193,7 @@
           <el-icon><Plus /></el-icon> 添加设计类型
         </el-button>
       </div>
-      <!-- Section 6: Change Password -->
+      <!-- Section 7: Change Password -->
       <div class="settings-section">
         <div class="section-header">
           <el-icon :size="18" color="#f59e0b"><Lock /></el-icon>
@@ -192,7 +219,7 @@
         </el-form>
       </div>
 
-      <!-- Section 7: Data Migration -->
+      <!-- Section 8: Data Migration -->
       <div class="settings-section migration-section">
         <div class="section-header">
           <el-icon :size="18" color="#2563eb"><UploadFilled /></el-icon>
@@ -214,7 +241,7 @@
         </div>
       </div>
 
-      <!-- Section 8: Folder Migration -->
+      <!-- Section 9: Folder Migration -->
       <div class="settings-section folder-migration-section">
         <div class="section-header">
           <el-icon :size="18" color="#7c3aed"><FolderOpened /></el-icon>
@@ -233,7 +260,7 @@
         </div>
       </div>
 
-      <!-- Section 9: Reset Data -->
+      <!-- Section 10: Reset Data -->
       <div class="settings-section reset-section">
         <div class="section-header">
           <el-icon :size="18" color="#e11d48"><WarnTriangleFilled /></el-icon>
@@ -370,6 +397,8 @@ const api = window.electronAPI
 const rootDir = ref('')
 const syncDir = ref('')
 const autoLaunch = ref(false)
+const requirePasswordOnStartup = ref(false)
+const requirePasswordOnTrayRestore = ref(false)
 const orderInfoDefaultExpanded = ref(false)
 const designTypes = ref([])
 const migrationBusy = ref(false)
@@ -456,6 +485,8 @@ async function loadData() {
   const val = await api.getSetting('rootDirectory')
   rootDir.value = val || ''
   syncDir.value = await api.getSetting('syncDirectory') || ''
+  requirePasswordOnStartup.value = await api.getSetting('requirePasswordOnStartup') === '1'
+  requirePasswordOnTrayRestore.value = await api.getSetting('requirePasswordOnTrayRestore') === '1'
   orderInfoDefaultExpanded.value = await api.getSetting('orderInfoDefaultExpanded') === '1'
   autoLaunch.value = await api.getAutoLaunch()
   const rows = await api.listDesignTypes()
@@ -478,6 +509,11 @@ watch(() => props.visible, (val) => {
 async function handleAutoLaunchChange(val) {
   await api.setAutoLaunch(val)
   ElMessage.success(val ? '已开启开机自启动' : '已关闭开机自启动')
+}
+
+async function handlePrivacySettingChange(key, val) {
+  await api.setSetting(key, val ? '1' : '0')
+  ElMessage.success(val ? '已开启密码验证' : '已关闭密码验证')
 }
 
 async function handleOrderInfoDefaultChange(val) {
@@ -982,6 +1018,44 @@ function convertToSubTypes(dt) {
   flex-wrap: wrap;
   padding: 4px 0;
 }
+
+.privacy-section {
+  border: 1px solid #dbe4ff;
+  border-radius: 12px;
+  padding: 14px;
+  background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+}
+
+.privacy-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.privacy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.privacy-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.privacy-desc {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
 .auto-launch-text {
   font-size: 13px;
   color: #606266;

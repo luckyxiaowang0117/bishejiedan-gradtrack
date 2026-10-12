@@ -6,6 +6,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowMinimize: () => ipcRenderer.invoke('window:minimize'),
   windowMaximize: () => ipcRenderer.invoke('window:maximize'),
   windowClose: () => ipcRenderer.invoke('window:close'),
+  onRequireUnlock: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('app:requireUnlock', listener)
+    return () => ipcRenderer.removeListener('app:requireUnlock', listener)
+  },
 
   // Auth
   hasUsers: () => ipcRenderer.invoke('auth:hasUsers'),

@@ -84,15 +84,27 @@ function persistWindowState(win) {
   }))
 }
 
+function shouldRequirePasswordOnTrayRestore() {
+  return getSettingValue('requirePasswordOnTrayRestore') === '1'
+}
+
+function showMainWindowWithRestorePrivacy() {
+  if (!mainWindow) return
+  if (shouldRequirePasswordOnTrayRestore()) {
+    mainWindow.webContents.send('app:requireUnlock')
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
     if (mainWindow) {
-      if (!mainWindow.isVisible()) mainWindow.show()
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.focus()
+      showMainWindowWithRestorePrivacy()
     }
   })
 }
@@ -214,10 +226,7 @@ function createTray() {
     {
       label: '显示窗口',
       click: () => {
-        if (mainWindow) {
-          mainWindow.show()
-          mainWindow.focus()
-        }
+        showMainWindowWithRestorePrivacy()
       },
     },
     { type: 'separator' },
@@ -237,8 +246,7 @@ function createTray() {
       if (mainWindow.isVisible()) {
         mainWindow.focus()
       } else {
-        mainWindow.show()
-        mainWindow.focus()
+        showMainWindowWithRestorePrivacy()
       }
     }
   })

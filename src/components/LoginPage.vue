@@ -31,12 +31,17 @@
           </svg>
         </div>
         <h1 class="brand-name">接单管理助手</h1>
-        <p class="brand-sub">{{ isRegister ? '创建您的账号' : '欢迎回来' }}</p>
+        <p class="brand-sub">{{ brandSubText }}</p>
       </div>
 
       <!-- Login Form -->
       <form v-if="!isRegister" @submit.prevent="handleLogin" class="login-form">
-        <div class="field">
+        <div v-if="isUnlockMode" class="unlock-account">
+          <span class="unlock-account-label">当前账号</span>
+          <strong>{{ unlockUser.username }}</strong>
+        </div>
+
+        <div v-else class="field">
           <label>账号</label>
           <div class="input-wrap">
             <svg class="field-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -54,16 +59,16 @@
             </button>
           </div>
         </div>
-        <label class="remember-row">
+        <label v-if="!isUnlockMode" class="remember-row">
           <input type="checkbox" v-model="remember" />
           <span>记住登录</span>
         </label>
         <button type="submit" class="submit-btn" :disabled="loading">
           <span v-if="loading" class="spinner" />
-          <span>{{ loading ? '登录中...' : '登 录' }}</span>
+          <span>{{ loading ? (isUnlockMode ? '验证中...' : '登录中...') : (isUnlockMode ? '解 锁' : '登 录') }}</span>
         </button>
         <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
-        <p class="switch-link">没有账号？<a @click="isRegister = true">立即注册</a></p>
+        <p v-if="!isUnlockMode" class="switch-link">没有账号？<a @click="isRegister = true">立即注册</a></p>
       </form>
 
       <!-- Register Form -->
@@ -105,9 +110,14 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
-const props = defineProps({ forceRegister: Boolean, isWindows: Boolean })
+const props = defineProps({
+  forceRegister: Boolean,
+  isWindows: Boolean,
+  unlockUser: Object,
+  unlockReason: String,
+})
 const emit = defineEmits(['logged-in'])
 const api = window.electronAPI
 
@@ -125,8 +135,47 @@ const regPassword = ref('')
 const regConfirm = ref('')
 const showRegPwd = ref(false)
 
+const isUnlockMode = computed(() => !!props.unlockUser?.id && !props.forceRegister)
+const brandSubText = computed(() => {
+  if (isRegister.value) return '创建您的账号'
+  if (isUnlockMode.value) {
+    return props.unlockReason === 'startup' ? '启动保护已开启，请输入密码' : '隐私保护已锁定，请输入密码'
+  }
+  return '欢迎回来'
+})
+
+watch(() => props.forceRegister, (value) => {
+  isRegister.value = !!value
+})
+
+watch(() => props.unlockUser?.id, (value) => {
+  if (value) {
+    isRegister.value = false
+    password.value = ''
+    errorMsg.value = ''
+  }
+})
+
 async function handleLogin() {
   errorMsg.value = ''
+  if (isUnlockMode.value) {
+    if (!password.value) return (errorMsg.value = '请输入密码')
+    loading.value = true
+    try {
+      const ok = await api.verifyPassword(props.unlockUser.id, password.value)
+      if (!ok) {
+        errorMsg.value = '密码错误'
+        return
+      }
+      emit('logged-in', props.unlockUser)
+    } catch (err) {
+      errorMsg.value = '验证失败: ' + (err.message || err)
+    } finally {
+      loading.value = false
+    }
+    return
+  }
+
   if (!username.value.trim()) return (errorMsg.value = '请输入账号')
   if (!password.value) return (errorMsg.value = '请输入密码')
   loading.value = true
@@ -321,6 +370,32 @@ async function handleRegister() {
   font-weight: 500;
   color: rgba(255, 255, 255, 0.6);
   margin-bottom: 6px;
+}
+
+.unlock-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 46px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.unlock-account-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.unlock-account strong {
+  min-width: 0;
+  font-size: 14px;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .input-wrap {

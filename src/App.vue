@@ -3,6 +3,8 @@
     v-if="!isLoggedIn"
     :force-register="forceRegister"
     :is-windows="isWindows"
+    :unlock-user="unlockUser"
+    :unlock-reason="unlockReason"
     @logged-in="onLoggedIn"
   />
 
@@ -169,6 +171,7 @@ function preventDefaults(e) {
 }
 
 let refreshTimer = null
+let removeRequireUnlockListener = null
 onMounted(async () => {
   const platform = await api.getPlatform()
   isWindows.value = platform === 'win32'
@@ -178,6 +181,11 @@ onMounted(async () => {
   refreshTimer = setInterval(() => {
     if (isLoggedIn.value) loadOrders()
   }, 60000)
+  if (api.onRequireUnlock) {
+    removeRequireUnlockListener = api.onRequireUnlock(() => {
+      lockAppForPassword('tray')
+    })
+  }
   await loadSidebarWidthPreference()
   await loadOrderInfoDefaultPreference()
   await checkAuth()
@@ -189,12 +197,15 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleWindowResize)
   if (removeSidebarResizeListeners) removeSidebarResizeListeners()
   clearResizeInteractionStyles()
+  if (removeRequireUnlockListener) removeRequireUnlockListener()
   if (refreshTimer) clearInterval(refreshTimer)
 })
 
 const isLoggedIn = ref(false)
 const currentUser = ref(null)
 const forceRegister = ref(false)
+const unlockUser = ref(null)
+const unlockReason = ref('')
 provide('currentUser', currentUser)
 
 function getCurrentGraduationYear() {
@@ -607,6 +618,8 @@ async function checkAuth() {
   const hasUsers = await api.hasUsers()
   if (!hasUsers) {
     forceRegister.value = true
+    unlockUser.value = null
+    unlockReason.value = ''
     return
   }
 
@@ -617,9 +630,18 @@ async function checkAuth() {
     const user = JSON.parse(saved)
     if (user && user.id && user.username) {
       currentUser.value = user
-      isLoggedIn.value = true
       forceRegister.value = false
-      await bootstrapUserSession(user)
+      const requireStartupPassword = await api.getSetting('requirePasswordOnStartup')
+      if (requireStartupPassword === '1') {
+        unlockUser.value = user
+        unlockReason.value = 'startup'
+        isLoggedIn.value = false
+      } else {
+        unlockUser.value = null
+        unlockReason.value = ''
+        isLoggedIn.value = true
+        await bootstrapUserSession(user)
+      }
     }
   } catch {}
 }
@@ -628,7 +650,34 @@ async function onLoggedIn(user) {
   currentUser.value = user
   isLoggedIn.value = true
   forceRegister.value = false
+  unlockUser.value = null
+  unlockReason.value = ''
   await bootstrapUserSession(user)
+}
+
+async function lockAppForPassword(reason = 'manual') {
+  const savedUser = currentUser.value || unlockUser.value
+  if (!savedUser?.id) {
+    const saved = await api.getSetting('rememberedUser')
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        if (parsed?.id && parsed?.username) {
+          currentUser.value = parsed
+          unlockUser.value = parsed
+        }
+      } catch {}
+    }
+  } else {
+    unlockUser.value = savedUser
+  }
+  if (!unlockUser.value?.id) return
+  forceRegister.value = false
+  unlockReason.value = reason
+  isLoggedIn.value = false
+  showStats.value = false
+  showSettings.value = false
+  showCreateModal.value = false
 }
 
 function openCreateModal(order) {
@@ -657,6 +706,8 @@ function handleDataReset() {
   currentUser.value = null
   isLoggedIn.value = false
   forceRegister.value = true
+  unlockUser.value = null
+  unlockReason.value = ''
   allOrders.value = []
   selectedOrderId.value = null
   showStats.value = false
@@ -711,6 +762,8 @@ async function handleLogout() {
     await api.setSetting('rememberedUser', '')
     currentUser.value = null
     isLoggedIn.value = false
+    unlockUser.value = null
+    unlockReason.value = ''
     allOrders.value = []
     selectedOrderId.value = null
     showStats.value = false
