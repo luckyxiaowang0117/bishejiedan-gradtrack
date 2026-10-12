@@ -1,8 +1,8 @@
-version: 6.2.0
+version: 6.3.0
 files:
-  - url: 接单管理助手 Setup 6.2.0.exe
-    sha512: O+6HCI9PVDUfD0M5T15cCUU1WBTUqMZ8pzrxihZOstpb+XUKbeLeBMKiBCp/MT4iiFZfiUDAXBNPbBJuFIngwQ==
-    size: 127928220
-path: 接单管理助手 Setup 6.2.0.exe
-sha512: O+6HCI9PVDUfD0M5T15cCUU1WBTUqMZ8pzrxihZOstpb+XUKbeLeBMKiBCp/MT4iiFZfiUDAXBNPbBJuFIngwQ==
-releaseDate: '2026-10-12T09:55:48.201Z'
+  - url: 接单管理助手 Setup 6.3.0.exe
+    sha512: KHP81de8yQwmDxhJhUxd2hBfN4XtqePFxBRNrozH7aeDDRznpVnfMGz/a6+VVdQN+lE2/36AjGAybT9UQ78NWw==
+    size: 127924515
+path: 接单管理助手 Setup 6.3.0.exe
+sha512: KHP81de8yQwmDxhJhUxd2hBfN4XtqePFxBRNrozH7aeDDRznpVnfMGz/a6+VVdQN+lE2/36AjGAybT9UQ78NWw==
+releaseDate: '2026-10-12T10:22:05.496Z'

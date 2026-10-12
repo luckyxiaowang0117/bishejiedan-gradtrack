@@ -440,17 +440,38 @@ function getOrderServiceCode(order) {
   return 'OS'
 }
 
+function normalizeOrderCodeSegment(value, maxLength = 12) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, maxLength)
+}
+
+function getOrderCodeRule(order) {
+  const fixedPrefix = normalizeOrderCodeSegment(getSettingValue('orderCodeFixedPrefix'))
+  const customServiceCode = normalizeOrderCodeSegment(getSettingValue('orderCodeServiceCode'))
+  return {
+    fixedPrefix,
+    serviceCode: customServiceCode || getOrderServiceCode(order),
+  }
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function generateNextOrderCode(userId, order, date = new Date()) {
   const database = getDb()
   const fallbackYear = Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getFullYear()
   const year = Number(order.graduationYear) || fallbackYear
-  const serviceCode = getOrderServiceCode(order)
-  const prefix = `${year}-${serviceCode}-`
+  const { fixedPrefix, serviceCode } = getOrderCodeRule(order)
+  const prefix = `${fixedPrefix ? `${fixedPrefix}-` : ''}${year}-${serviceCode}-`
   const rows = database.prepare(`
     SELECT orderCode FROM Orders
     WHERE userId = ? AND orderCode LIKE ?
   `).all(userId, `${prefix}%`)
-  const codePattern = new RegExp(`^${year}-${serviceCode}-(\\d{4})$`)
+  const codePattern = new RegExp(`^${escapeRegExp(prefix)}(\\d{4})$`)
   let maxSeq = 0
   for (const row of rows) {
     const match = String(row.orderCode || '').match(codePattern)
@@ -1072,7 +1093,8 @@ function registerIpcHandlers() {
       orderData.orderCode = existingOrder.orderCode || ''
     }
     if (!existingOrder && !orderData.orderCode) {
-      orderData.orderCode = generateNextOrderCode(userId, orderData, new Date(orderData.createdAt || Date.now()))
+      orderData.orderCode = String(orderData.groupChatName || '').trim()
+        || generateNextOrderCode(userId, orderData, new Date(orderData.createdAt || Date.now()))
       if (!orderData.groupChatName) orderData.groupChatName = orderData.orderCode
     }
     if (existingOrder) {
@@ -2045,7 +2067,9 @@ function registerIpcHandlers() {
       for (const o of importedOrders) {
         const mappedPath = replacePathPrefix(oldRoot, normalizedNewRoot, o.folderPath || '')
         const createdAt = o.createdAt || new Date().toISOString()
-        const importedOrderCode = String(o.orderCode || '').trim() || generateNextOrderCode(currentUserId, o, new Date(createdAt))
+        const importedOrderCode = String(o.orderCode || '').trim()
+          || String(o.groupChatName || '').trim()
+          || generateNextOrderCode(currentUserId, o, new Date(createdAt))
         const importedHandler = String(o.handler || '').trim() || '本人'
         const importedSelfHandled = isSelfHandlerValue(importedHandler)
         const result = insertOrder.run({
@@ -2255,8 +2279,18 @@ function registerIpcHandlers() {
       orderData.handler = '本人'
       orderData.dispatchAmount = 0
     }
-    orderData.orderCode = String(orderData.orderCode || '').trim() || generateNextOrderCode(orderData.userId, orderData, now)
-    orderData.groupChatName = String(orderData.groupChatName || '').trim() || orderData.orderCode
+    const manualGroupChatName = String(orderData.groupChatName || '').trim()
+    orderData.orderCode = String(orderData.orderCode || '').trim()
+      || manualGroupChatName
+      || generateNextOrderCode(orderData.userId, orderData, now)
+    const duplicateOrder = db.prepare(`
+      SELECT id FROM Orders
+      WHERE userId = ? AND orderCode = ? COLLATE NOCASE
+    `).get(orderData.userId, orderData.orderCode)
+    if (duplicateOrder) {
+      throw new Error(`订单编号“${orderData.orderCode}”已存在，请检查群聊名称或使用其他编号。`)
+    }
+    orderData.groupChatName = manualGroupChatName || orderData.orderCode
     const result = stmt.run(orderData)
     const orderRow = getOrderById(Number(result.lastInsertRowid))
     recordOrderSyncEvent('create', orderRow)

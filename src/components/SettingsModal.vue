@@ -28,6 +28,41 @@
         <el-alert v-if="!rootDir" title="建议在创建第一个订单前配置此项，否则不会自动生成项目文件夹。" type="warning" show-icon :closable="false" class="settings-alert" />
       </div>
 
+      <div class="settings-section order-code-section">
+        <div class="section-header">
+          <el-icon :size="18" color="#0f766e"><SetUp /></el-icon>
+          <div>
+            <div class="section-title">订单编号规则</div>
+            <div class="section-desc">设置自动生成订单编号时使用的固定前缀与业务简写</div>
+          </div>
+        </div>
+        <div class="order-code-fields">
+          <el-form-item label="固定前缀（选填）">
+            <el-input
+              v-model="orderCodeFixedPrefix"
+              maxlength="12"
+              placeholder="例: WH"
+              @input="orderCodeFixedPrefix = normalizeOrderCodeSegment($event)"
+              @change="persistOrderCodeSettings"
+            />
+          </el-form-item>
+          <el-form-item label="业务简写（选填）">
+            <el-input
+              v-model="orderCodeServiceCode"
+              maxlength="12"
+              placeholder="例: SS"
+              @input="orderCodeServiceCode = normalizeOrderCodeSegment($event)"
+              @change="persistOrderCodeSettings"
+            />
+          </el-form-item>
+        </div>
+        <div class="order-code-preview">
+          <span>编号预览</span>
+          <code>{{ orderCodePreview }}</code>
+        </div>
+        <div class="order-code-note">业务简写留空时，将继续根据订单类型自动使用 BS、BP、FM 等现有简写。</div>
+      </div>
+
       <!-- Section 2: Auto Launch -->
       <div class="settings-section">
         <div class="section-header">
@@ -400,6 +435,8 @@ const autoLaunch = ref(false)
 const requirePasswordOnStartup = ref(false)
 const requirePasswordOnTrayRestore = ref(false)
 const orderInfoDefaultExpanded = ref(false)
+const orderCodeFixedPrefix = ref('')
+const orderCodeServiceCode = ref('')
 const designTypes = ref([])
 const migrationBusy = ref(false)
 const syncBusy = ref(false)
@@ -429,6 +466,28 @@ const formattedLastSyncAt = computed(() => {
   if (Number.isNaN(date.getTime())) return value
   const pad = (num) => String(num).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+})
+
+function getCurrentGraduationYear() {
+  const now = new Date()
+  return now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear()
+}
+
+function normalizeOrderCodeSegment(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 12)
+}
+
+const orderCodePreview = computed(() => {
+  const parts = []
+  if (orderCodeFixedPrefix.value) parts.push(orderCodeFixedPrefix.value)
+  parts.push(String(getCurrentGraduationYear()))
+  parts.push(orderCodeServiceCode.value || 'BS')
+  parts.push('0001')
+  return parts.join('-')
 })
 
 const folderMigrationReasonMap = {
@@ -488,6 +547,8 @@ async function loadData() {
   requirePasswordOnStartup.value = await api.getSetting('requirePasswordOnStartup') === '1'
   requirePasswordOnTrayRestore.value = await api.getSetting('requirePasswordOnTrayRestore') === '1'
   orderInfoDefaultExpanded.value = await api.getSetting('orderInfoDefaultExpanded') === '1'
+  orderCodeFixedPrefix.value = normalizeOrderCodeSegment(await api.getSetting('orderCodeFixedPrefix'))
+  orderCodeServiceCode.value = normalizeOrderCodeSegment(await api.getSetting('orderCodeServiceCode'))
   autoLaunch.value = await api.getAutoLaunch()
   const rows = await api.listDesignTypes()
   designTypes.value = rows.map(r => ({
@@ -522,7 +583,17 @@ async function handleOrderInfoDefaultChange(val) {
   ElMessage.success(val ? '订单详情将默认展开' : '订单详情将默认折叠')
 }
 
+async function persistOrderCodeSettings() {
+  orderCodeFixedPrefix.value = normalizeOrderCodeSegment(orderCodeFixedPrefix.value)
+  orderCodeServiceCode.value = normalizeOrderCodeSegment(orderCodeServiceCode.value)
+  await Promise.all([
+    api.setSetting('orderCodeFixedPrefix', orderCodeFixedPrefix.value),
+    api.setSetting('orderCodeServiceCode', orderCodeServiceCode.value),
+  ])
+}
+
 async function persistPendingChanges() {
+  await persistOrderCodeSettings()
   // 1. 收集所有正在编辑但未确认的输入
   for (const dt of designTypes.value) {
     if (dt._adding) {
@@ -928,6 +999,58 @@ function convertToSubTypes(dt) {
 
 .settings-alert {
   margin-top: 4px;
+}
+
+.order-code-section {
+  border: 1px solid #bfe8dc;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f5fbf9;
+}
+
+.order-code-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.order-code-fields :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.order-code-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #d5e9e3;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.order-code-preview code {
+  color: #0f766e;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.order-code-note {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 720px) {
+  .order-code-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 .sync-section {

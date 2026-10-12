@@ -65,7 +65,7 @@
                 <el-input v-model="form.wechatName" placeholder="选填" />
               </el-form-item>
               <el-form-item label="群聊名称">
-                <el-input v-model="form.groupChatName" :placeholder="isEditing ? '选填' : '留空自动使用订单编号'" />
+                <el-input v-model="form.groupChatName" :placeholder="isEditing ? '选填' : '留空自动生成；填写后同步作为订单编号'" />
               </el-form-item>
             </div>
 
