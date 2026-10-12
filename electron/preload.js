@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDistinctValues: (userId, field) => ipcRenderer.invoke('orders:distinctValues', userId, field),
   createOrder: (data) => ipcRenderer.invoke('orders:create', data),
   updateOrder: (userId, id, data) => ipcRenderer.invoke('orders:update', userId, id, data),
+  updateOrderWithFolder: (userId, id, data, renameFolder) => ipcRenderer.invoke('orders:updateWithFolder', userId, id, data, renameFolder),
   deleteOrder: (userId, id, options) => ipcRenderer.invoke('orders:delete', userId, id, options),
 
   // Revisions

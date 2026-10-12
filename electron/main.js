@@ -367,6 +367,11 @@ function getOrderSortClause(sortMode) {
         datetime(o.deadline) ASC,
         datetime(o.createdAt) DESC
       `
+    case 'title_missing_first':
+      return `
+        CASE WHEN TRIM(COALESCE(o.title, '')) = '' THEN 0 ELSE 1 END ASC,
+        datetime(o.createdAt) DESC
+      `
     case 'urgency_desc':
       return `
         CASE
@@ -482,17 +487,31 @@ function sanitizePathPart(str, fallback = '') {
   return (str || fallback || '').trim().replace(/[<>:"/\\|?*]/g, '_')
 }
 
+function normalizePackageTier(value) {
+  return ['budget', 'carefree', 'vip'].includes(value) ? value : ''
+}
+
+function isSelfHandlerValue(value) {
+  const handler = String(value || '').trim()
+  return !handler || handler === '本人'
+}
+
+function buildOrderFolderName(order) {
+  const folderYear = Number(order.graduationYear) || new Date().getFullYear()
+  const studentNamePart = sanitizePathPart(order.studentName)
+  const sanitizedTitle = sanitizePathPart(order.title, '题目暂未确认') || '题目暂未确认'
+  return studentNamePart
+    ? `${folderYear}-${studentNamePart}-${sanitizedTitle}`
+    : `${folderYear}-${sanitizedTitle}`
+}
+
 function buildGraduationOrderFolderPath(rootDirectory, order) {
   const type = order.orderType || 'thesis'
   const folderYear = Number(order.graduationYear) || new Date().getFullYear()
   const subDir = getOrderTypeSubDir(type)
   const uniName = sanitizePathPart(order.university)
   const majorName = sanitizePathPart(order.major)
-  const studentNamePart = sanitizePathPart(order.studentName)
-  const sanitizedTitle = sanitizePathPart(order.title, '未命名项目') || '未命名项目'
-  const folderName = studentNamePart
-    ? `${folderYear}-${studentNamePart}-${sanitizedTitle}`
-    : `${folderYear}-${sanitizedTitle}`
+  const folderName = buildOrderFolderName(order)
   return path.join(rootDirectory, `${folderYear}届`, subDir, uniName, `${majorName}专业`, folderName)
 }
 
@@ -677,6 +696,7 @@ function registerIpcHandlers() {
       designStatus: '设计状态',
       orderType: '订单类型',
       formatMode: '合作模式',
+      packageTier: '套餐方案',
       hasOriginalText: '有无原文',
       specialService: '服务项目',
       isDesignFinished: '是否完成',
@@ -1021,6 +1041,7 @@ function registerIpcHandlers() {
       designStatus: order.designStatus || '',
       orderType: order.orderType || 'thesis',
       formatMode: order.formatMode || '',
+      packageTier: normalizePackageTier(order.packageTier),
       hasOriginalText: Number(order.hasOriginalText) || 0,
       specialService: order.specialService || '',
       receiver: order.receiver || '',
@@ -1039,6 +1060,12 @@ function registerIpcHandlers() {
       isHandlerPaid: Number(order.isHandlerPaid) || 0,
       handlerPaidAmount: Number(order.handlerPaidAmount) || 0,
       syncUuid: order.syncUuid,
+    }
+    if (isSelfHandlerValue(orderData.handler)) {
+      orderData.handler = '本人'
+      orderData.dispatchAmount = 0
+      orderData.handlerPaidAmount = 0
+      orderData.isHandlerPaid = 0
     }
     const existingOrder = getOrderBySyncUuid(order.syncUuid, userId)
     if (existingOrder && !orderData.orderCode) {
@@ -1065,6 +1092,7 @@ function registerIpcHandlers() {
           designStatus = @designStatus,
           orderType = @orderType,
           formatMode = @formatMode,
+          packageTier = @packageTier,
           hasOriginalText = @hasOriginalText,
           specialService = @specialService,
           receiver = @receiver,
@@ -1088,13 +1116,13 @@ function registerIpcHandlers() {
       db.prepare(`
         INSERT INTO Orders (
           userId, title, university, college, major, studentName, wechatName, orderCode, groupChatName,
-          includesDesign, designType, designSubType, designStatus, orderType, formatMode,
+          includesDesign, designType, designSubType, designStatus, orderType, formatMode, packageTier,
           hasOriginalText, specialService, receiver, handler, advisor, deadline, totalAmount, paidAmount,
           dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt,
           isDraftSubmitted, refundAmount, isHandlerPaid, handlerPaidAmount, syncUuid
         ) VALUES (
           @userId, @title, @university, @college, @major, @studentName, @wechatName, @orderCode, @groupChatName,
-          @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode,
+          @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @packageTier,
           @hasOriginalText, @specialService, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount,
           @dispatchAmount, @isDesignFinished, @folderPath, @graduationYear, @createdAt,
           @isDraftSubmitted, @refundAmount, @isHandlerPaid, @handlerPaidAmount, @syncUuid
@@ -1342,6 +1370,58 @@ function registerIpcHandlers() {
     }
   }
 
+  function normalizeOrderUpdateData(data = {}) {
+    const next = { ...data }
+    if (Object.prototype.hasOwnProperty.call(next, 'title')) {
+      next.title = String(next.title || '').trim()
+    }
+    if (Object.prototype.hasOwnProperty.call(next, 'packageTier')) {
+      next.packageTier = normalizePackageTier(next.packageTier)
+    }
+    if (Object.prototype.hasOwnProperty.call(next, 'handler')) {
+      next.handler = String(next.handler || '').trim() || '本人'
+      if (isSelfHandlerValue(next.handler)) {
+        next.dispatchAmount = 0
+        next.handlerPaidAmount = 0
+        next.isHandlerPaid = 0
+      }
+    }
+    return next
+  }
+
+  function updateRelatedPathsForOrderFolder(orderId, oldFolderPath, newFolderPath) {
+    const revisions = db.prepare('SELECT id, folderPath FROM Revisions WHERE orderId = ?').all(orderId)
+    for (const revision of revisions) {
+      const nextRevisionPath = rewritePathForOrderFolder(revision.folderPath || '', oldFolderPath, newFolderPath)
+      if (nextRevisionPath !== (revision.folderPath || '')) {
+        db.prepare('UPDATE Revisions SET folderPath = ? WHERE id = ?').run(nextRevisionPath, revision.id)
+        const revisionRow = getRevisionWithContextById(revision.id)
+        recordRevisionSyncEvent('update', revisionRow, ['folderPath'])
+      }
+    }
+
+    const feedbackItems = db.prepare(`
+      SELECT fi.id, fi.imagePath, fi.attachments
+      FROM FeedbackItems fi
+      JOIN Revisions r ON r.id = fi.revisionId
+      WHERE r.orderId = ?
+    `).all(orderId)
+    for (const feedback of feedbackItems) {
+      const nextImagePath = feedback.imagePath
+        ? rewritePathForOrderFolder(feedback.imagePath, oldFolderPath, newFolderPath)
+        : feedback.imagePath
+      const nextAttachments = rewriteAttachmentsForOrderFolder(feedback.attachments || '[]', oldFolderPath, newFolderPath)
+      const changedFields = []
+      if (nextImagePath !== feedback.imagePath) changedFields.push('imagePath')
+      if (nextAttachments !== (feedback.attachments || '[]')) changedFields.push('attachments')
+      if (changedFields.length > 0) {
+        db.prepare('UPDATE FeedbackItems SET imagePath = ?, attachments = ? WHERE id = ?').run(nextImagePath, nextAttachments, feedback.id)
+        const feedbackRow = getFeedbackWithContextById(feedback.id)
+        recordFeedbackSyncEvent('update', feedbackRow, changedFields)
+      }
+    }
+  }
+
   function buildGraduationFolderMigrationPreview(userId) {
     const rootDirectory = getRootDirectory()
     if (!userId) return { success: false, error: 'INVALID_USER' }
@@ -1435,36 +1515,7 @@ function registerIpcHandlers() {
         copyDirRecursive(item.oldPath, item.newPath)
 
         const updateTxn = db.transaction(() => {
-          const revisions = db.prepare('SELECT id, folderPath FROM Revisions WHERE orderId = ?').all(item.orderId)
-          for (const revision of revisions) {
-            const nextRevisionPath = rewritePathForOrderFolder(revision.folderPath || '', item.oldPath, item.newPath)
-            if (nextRevisionPath !== (revision.folderPath || '')) {
-              db.prepare('UPDATE Revisions SET folderPath = ? WHERE id = ?').run(nextRevisionPath, revision.id)
-              const revisionRow = getRevisionWithContextById(revision.id)
-              recordRevisionSyncEvent('update', revisionRow, ['folderPath'])
-            }
-          }
-
-          const feedbackItems = db.prepare(`
-            SELECT fi.id, fi.imagePath, fi.attachments
-            FROM FeedbackItems fi
-            JOIN Revisions r ON r.id = fi.revisionId
-            WHERE r.orderId = ?
-          `).all(item.orderId)
-          for (const feedback of feedbackItems) {
-            const nextImagePath = feedback.imagePath
-              ? rewritePathForOrderFolder(feedback.imagePath, item.oldPath, item.newPath)
-              : feedback.imagePath
-            const nextAttachments = rewriteAttachmentsForOrderFolder(feedback.attachments || '[]', item.oldPath, item.newPath)
-            const changedFields = []
-            if (nextImagePath !== feedback.imagePath) changedFields.push('imagePath')
-            if (nextAttachments !== (feedback.attachments || '[]')) changedFields.push('attachments')
-            if (changedFields.length > 0) {
-              db.prepare('UPDATE FeedbackItems SET imagePath = ?, attachments = ? WHERE id = ?').run(nextImagePath, nextAttachments, feedback.id)
-              const feedbackRow = getFeedbackWithContextById(feedback.id)
-              recordFeedbackSyncEvent('update', feedbackRow, changedFields)
-            }
-          }
+          updateRelatedPathsForOrderFolder(item.orderId, item.oldPath, item.newPath)
 
           db.prepare('UPDATE Orders SET folderPath = ? WHERE id = ? AND userId = ?').run(item.newPath, item.orderId, userId)
           const orderRow = getOrderById(item.orderId)
@@ -1586,7 +1637,7 @@ function registerIpcHandlers() {
     const byType = db.prepare(`
       SELECT orderType, COUNT(*) as count,
         SUM(totalAmount) as revenue,
-        SUM(dispatchAmount) as dispatch,
+        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as dispatch,
         SUM(refundAmount) as refund,
         SUM(paidAmount) as paid
       FROM Orders${w} GROUP BY orderType
@@ -1596,7 +1647,7 @@ function registerIpcHandlers() {
       SELECT
         SUM(totalAmount) as totalRevenue,
         SUM(paidAmount) as totalPaid,
-        SUM(dispatchAmount) as totalDispatch,
+        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as totalDispatch,
         SUM(refundAmount) as totalRefund
       FROM Orders${w}
     `).get(dateParams)
@@ -1617,12 +1668,19 @@ function registerIpcHandlers() {
       )
     `).get(dateParams).c
 
+    const titleMissingCount = db.prepare(`
+      SELECT COUNT(*) as c FROM Orders
+      WHERE userId = @userId AND TRIM(COALESCE(title, '')) = ''${dateFilter}${gradFilter}
+    `).get(dateParams).c
+
     const handlerPayment = db.prepare(`
       SELECT
         SUM(CASE WHEN handlerPaidAmount >= dispatchAmount AND dispatchAmount > 0 THEN 1 ELSE 0 END) as paidCount,
         SUM(CASE WHEN handlerPaidAmount < dispatchAmount AND dispatchAmount > 0 THEN 1 ELSE 0 END) as unpaidCount,
         SUM(CASE WHEN dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount
-      FROM Orders WHERE userId = @userId AND dispatchAmount > 0${dateFilter}${gradFilter}
+      FROM Orders WHERE userId = @userId
+        AND TRIM(COALESCE(handler, '')) NOT IN ('', '本人')
+        AND dispatchAmount > 0${dateFilter}${gradFilter}
     `).get(dateParams)
 
     const byReceiver = db.prepare(`
@@ -1676,6 +1734,7 @@ function registerIpcHandlers() {
     return {
       totalOrders,
       completedCount,
+      titleMissingCount,
       overall: {
         totalRevenue: overall.totalRevenue || 0,
         totalPaid: overall.totalPaid || 0,
@@ -1699,14 +1758,15 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('stats:handlerDetail', (_, userId, handlerName, weekOffset, graduationYear) => {
-    const handler = handlerName === '本人' ? '' : handlerName
+    const handler = String(handlerName || '').trim()
     const offset = weekOffset || 0
     const gradCond = (graduationYear && graduationYear > 0) ? ' AND graduationYear = @graduationYear' : ''
 
     const allOrders = db.prepare(`
       SELECT id, title, orderType, totalAmount, dispatchAmount, handlerPaidAmount,
         CASE WHEN receiver = '' THEN '本人' ELSE receiver END as receiver, createdAt
-      FROM Orders WHERE userId = @userId AND (handler = @handler OR (@handler = '' AND handler = ''))${gradCond}
+      FROM Orders WHERE userId = @userId AND handler = @handler
+        AND TRIM(COALESCE(handler, '')) NOT IN ('', '本人')${gradCond}
       ORDER BY createdAt DESC
     `).all({ userId, handler, graduationYear })
 
@@ -1720,7 +1780,8 @@ function registerIpcHandlers() {
       SELECT id, title, orderType, totalAmount, dispatchAmount, handlerPaidAmount,
         CASE WHEN receiver = '' THEN '本人' ELSE receiver END as receiver, createdAt
       FROM Orders
-      WHERE userId = @userId AND (handler = @handler OR (@handler = '' AND handler = ''))${gradCond}
+      WHERE userId = @userId AND handler = @handler
+        AND TRIM(COALESCE(handler, '')) NOT IN ('', '本人')${gradCond}
       AND createdAt >= @start AND createdAt < @end
       ORDER BY createdAt DESC
     `).all({ userId, handler, graduationYear, start: weekStart.toISOString(), end: weekEnd.toISOString() })
@@ -1728,22 +1789,24 @@ function registerIpcHandlers() {
     const totalStats = db.prepare(`
       SELECT
         COUNT(*) as orderCount,
-        SUM(dispatchAmount) as totalDispatch,
+        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as totalDispatch,
         SUM(handlerPaidAmount) as paidAmount,
         SUM(CASE WHEN dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount,
         SUM(CASE WHEN handlerPaidAmount >= dispatchAmount AND dispatchAmount > 0 THEN 1 ELSE 0 END) as paidCount,
         SUM(CASE WHEN handlerPaidAmount < dispatchAmount AND dispatchAmount > 0 THEN 1 ELSE 0 END) as unpaidCount
-      FROM Orders WHERE userId = @userId AND (handler = @handler OR (@handler = '' AND handler = ''))${gradCond}
+      FROM Orders WHERE userId = @userId AND handler = @handler
+        AND TRIM(COALESCE(handler, '')) NOT IN ('', '本人')${gradCond}
     `).get({ userId, handler, graduationYear })
 
     const weekStats = db.prepare(`
       SELECT
         COUNT(*) as orderCount,
-        SUM(dispatchAmount) as totalDispatch,
-        SUM(handlerPaidAmount) as paidAmount,
-        SUM(CASE WHEN dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount
+        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as totalDispatch,
+        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN handlerPaidAmount ELSE 0 END) as paidAmount,
+        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') AND dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount
       FROM Orders
-      WHERE userId = @userId AND (handler = @handler OR (@handler = '' AND handler = ''))${gradCond}
+      WHERE userId = @userId AND handler = @handler
+        AND TRIM(COALESCE(handler, '')) NOT IN ('', '本人')${gradCond}
       AND createdAt >= @start AND createdAt < @end
     `).get({ userId, handler, graduationYear, start: weekStart.toISOString(), end: weekEnd.toISOString() })
 
@@ -1775,8 +1838,10 @@ function registerIpcHandlers() {
     const gradCond = (graduationYear && graduationYear > 0) ? ' AND graduationYear = @graduationYear' : ''
 
     const allOrders = db.prepare(`
-      SELECT id, title, orderType, totalAmount, paidAmount, dispatchAmount, handlerPaidAmount,
-        CASE WHEN handler = '' THEN '本人' ELSE handler END as handler, createdAt
+      SELECT id, title, orderType, totalAmount, paidAmount,
+        CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END as dispatchAmount,
+        CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN handlerPaidAmount ELSE 0 END as handlerPaidAmount,
+        CASE WHEN TRIM(COALESCE(handler, '')) IN ('', '本人') THEN '本人' ELSE handler END as handler, createdAt
       FROM Orders WHERE userId = @userId AND (receiver = @receiver OR (@receiver = '' AND receiver = ''))${gradCond}
       ORDER BY createdAt DESC
     `).all({ userId, receiver, graduationYear })
@@ -1785,7 +1850,7 @@ function registerIpcHandlers() {
       SELECT
         COUNT(*) as orderCount,
         SUM(totalAmount) as totalAmount,
-        SUM(dispatchAmount) as totalDispatch,
+        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as totalDispatch,
         SUM(paidAmount) as paidAmount,
         SUM(CASE WHEN totalAmount > paidAmount THEN totalAmount - paidAmount ELSE 0 END) as unpaidAmount,
         SUM(CASE WHEN totalAmount > 0 AND paidAmount >= totalAmount THEN 1 ELSE 0 END) as paidCount,
@@ -1795,11 +1860,11 @@ function registerIpcHandlers() {
 
     const byHandler = db.prepare(`
       SELECT
-        CASE WHEN handler = '' THEN '本人' ELSE handler END as name,
+        CASE WHEN TRIM(COALESCE(handler, '')) IN ('', '本人') THEN '本人' ELSE handler END as name,
         COUNT(*) as orderCount,
-        SUM(dispatchAmount) as totalDispatch,
-        SUM(handlerPaidAmount) as paidAmount,
-        SUM(CASE WHEN dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount
+        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as totalDispatch,
+        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN handlerPaidAmount ELSE 0 END) as paidAmount,
+        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') AND dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount
       FROM Orders WHERE userId = @userId AND (receiver = @receiver OR (@receiver = '' AND receiver = ''))${gradCond}
       GROUP BY name ORDER BY orderCount DESC
     `).all({ userId, receiver, graduationYear })
@@ -1974,13 +2039,15 @@ function registerIpcHandlers() {
 
       const orderMap = new Map()
       const insertOrder = db.prepare(`
-        INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, orderCode, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, isDraftSubmitted, refundAmount, isHandlerPaid, handlerPaidAmount, syncUuid)
-        VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @orderCode, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, @isDesignFinished, @folderPath, @graduationYear, @createdAt, @isDraftSubmitted, @refundAmount, @isHandlerPaid, @handlerPaidAmount, @syncUuid)
+        INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, orderCode, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, packageTier, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, isDraftSubmitted, refundAmount, isHandlerPaid, handlerPaidAmount, syncUuid)
+        VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @orderCode, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @packageTier, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, @isDesignFinished, @folderPath, @graduationYear, @createdAt, @isDraftSubmitted, @refundAmount, @isHandlerPaid, @handlerPaidAmount, @syncUuid)
       `)
       for (const o of importedOrders) {
         const mappedPath = replacePathPrefix(oldRoot, normalizedNewRoot, o.folderPath || '')
         const createdAt = o.createdAt || new Date().toISOString()
         const importedOrderCode = String(o.orderCode || '').trim() || generateNextOrderCode(currentUserId, o, new Date(createdAt))
+        const importedHandler = String(o.handler || '').trim() || '本人'
+        const importedSelfHandled = isSelfHandlerValue(importedHandler)
         const result = insertOrder.run({
           userId: currentUserId,
           title: o.title || '',
@@ -1998,22 +2065,23 @@ function registerIpcHandlers() {
           designStatus: o.designStatus || '',
           orderType: o.orderType || 'thesis',
           formatMode: o.formatMode || '',
+          packageTier: normalizePackageTier(o.packageTier),
           hasOriginalText: Number(o.hasOriginalText) || 0,
           receiver: o.receiver || '',
-          handler: o.handler || '',
+          handler: importedHandler,
           advisor: o.advisor || '',
           deadline: o.deadline || '',
           totalAmount: Number(o.totalAmount) || 0,
           paidAmount: Number(o.paidAmount) || 0,
-          dispatchAmount: Number(o.dispatchAmount) || 0,
+          dispatchAmount: importedSelfHandled ? 0 : (Number(o.dispatchAmount) || 0),
           isDesignFinished: Number(o.isDesignFinished) || 0,
           folderPath: mappedPath,
           graduationYear: Number(o.graduationYear) || 0,
           createdAt,
           isDraftSubmitted: Number(o.isDraftSubmitted) || 0,
           refundAmount: Number(o.refundAmount) || 0,
-          isHandlerPaid: Number(o.isHandlerPaid) || 0,
-          handlerPaidAmount: Number(o.handlerPaidAmount) || 0,
+          isHandlerPaid: importedSelfHandled ? 0 : (Number(o.isHandlerPaid) || 0),
+          handlerPaidAmount: importedSelfHandled ? 0 : (Number(o.handlerPaidAmount) || 0),
           syncUuid: o.syncUuid || makeSyncId(),
         })
         orderMap.set(o.id, Number(result.lastInsertRowid))
@@ -2171,16 +2239,21 @@ function registerIpcHandlers() {
 
   ipcMain.handle('orders:create', (_, data) => {
     const stmt = db.prepare(`
-      INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, orderCode, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, syncUuid)
-      VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @orderCode, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, 0, @folderPath, @graduationYear, datetime('now'), @syncUuid)
+      INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, orderCode, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, packageTier, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, syncUuid)
+      VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @orderCode, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @packageTier, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, 0, @folderPath, @graduationYear, datetime('now'), @syncUuid)
     `)
     const now = new Date()
     const defaultGradYear = now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear()
     const orderData = {
       designType: '', designSubType: '', designStatus: '',
-      orderType: 'thesis', formatMode: '', hasOriginalText: 0, specialService: '',
+      orderType: 'thesis', formatMode: '', packageTier: '', hasOriginalText: 0, specialService: '',
       dispatchAmount: 0, graduationYear: defaultGradYear, syncUuid: makeSyncId(),
       ...data,
+    }
+    orderData.packageTier = normalizePackageTier(orderData.packageTier)
+    if (isSelfHandlerValue(orderData.handler)) {
+      orderData.handler = '本人'
+      orderData.dispatchAmount = 0
     }
     orderData.orderCode = String(orderData.orderCode || '').trim() || generateNextOrderCode(orderData.userId, orderData, now)
     orderData.groupChatName = String(orderData.groupChatName || '').trim() || orderData.orderCode
@@ -2194,12 +2267,86 @@ function registerIpcHandlers() {
     // Verify the order belongs to the user before updating
     const order = db.prepare('SELECT id FROM Orders WHERE id = ? AND userId = ?').get(id, userId)
     if (!order) return false
-    
-    const fields = Object.keys(data).map(k => `${k} = @${k}`).join(', ')
-    db.prepare(`UPDATE Orders SET ${fields} WHERE id = @id AND userId = @userId`).run({ ...data, id, userId })
+
+    const normalizedData = normalizeOrderUpdateData(data)
+    const fields = Object.keys(normalizedData).map(k => `${k} = @${k}`).join(', ')
+    if (!fields) return true
+    db.prepare(`UPDATE Orders SET ${fields} WHERE id = @id AND userId = @userId`).run({ ...normalizedData, id, userId })
     const orderRow = getOrderById(id)
-    recordOrderSyncEvent('update', orderRow, Object.keys(data))
+    recordOrderSyncEvent('update', orderRow, Object.keys(normalizedData))
     return true
+  })
+
+  ipcMain.handle('orders:updateWithFolder', (_, userId, id, data, renameFolder = false) => {
+    const existingOrder = db.prepare('SELECT * FROM Orders WHERE id = ? AND userId = ?').get(id, userId)
+    if (!existingOrder) return { success: false, error: 'ORDER_NOT_FOUND' }
+
+    const normalizedData = normalizeOrderUpdateData(data)
+    if (!renameFolder || !existingOrder.folderPath) {
+      const fields = Object.keys(normalizedData).map(k => `${k} = @${k}`).join(', ')
+      if (fields) {
+        db.prepare(`UPDATE Orders SET ${fields} WHERE id = @id AND userId = @userId`).run({ ...normalizedData, id, userId })
+        recordOrderSyncEvent('update', getOrderById(id), Object.keys(normalizedData))
+      }
+      return { success: true, folderRenamed: false, folderPath: existingOrder.folderPath || '' }
+    }
+
+    const rootDirectory = getRootDirectory()
+    const oldFolderPath = path.normalize(existingOrder.folderPath)
+    if (!rootDirectory) return { success: false, error: 'ROOT_DIR_NOT_SET' }
+    if (!fs.existsSync(oldFolderPath)) return { success: false, error: 'SOURCE_NOT_FOUND', oldFolderPath }
+    if (isSamePath(rootDirectory, oldFolderPath) || !isPathWithin(rootDirectory, oldFolderPath)) {
+      return { success: false, error: 'OUTSIDE_ROOT', oldFolderPath }
+    }
+
+    const nextOrder = { ...existingOrder, ...normalizedData }
+    const newFolderPath = path.join(path.dirname(oldFolderPath), buildOrderFolderName(nextOrder))
+    if (!isPathWithin(rootDirectory, newFolderPath)) {
+      return { success: false, error: 'OUTSIDE_ROOT', oldFolderPath, newFolderPath }
+    }
+    if (isSamePath(oldFolderPath, newFolderPath)) {
+      const fields = Object.keys(normalizedData).map(k => `${k} = @${k}`).join(', ')
+      if (fields) {
+        db.prepare(`UPDATE Orders SET ${fields} WHERE id = @id AND userId = @userId`).run({ ...normalizedData, id, userId })
+        recordOrderSyncEvent('update', getOrderById(id), Object.keys(normalizedData))
+      }
+      return { success: true, folderRenamed: false, folderPath: oldFolderPath }
+    }
+    if (fs.existsSync(newFolderPath)) {
+      return { success: false, error: 'TARGET_EXISTS', oldFolderPath, newFolderPath }
+    }
+
+    let folderRenamed = false
+    try {
+      fs.renameSync(oldFolderPath, newFolderPath)
+      folderRenamed = true
+      const updateTxn = db.transaction(() => {
+        updateRelatedPathsForOrderFolder(id, oldFolderPath, newFolderPath)
+        const updateData = { ...normalizedData, folderPath: newFolderPath }
+        const fields = Object.keys(updateData).map(k => `${k} = @${k}`).join(', ')
+        db.prepare(`UPDATE Orders SET ${fields} WHERE id = @id AND userId = @userId`).run({ ...updateData, id, userId })
+        recordOrderSyncEvent('update', getOrderById(id), Object.keys(updateData))
+      })
+      updateTxn()
+      return { success: true, folderRenamed: true, oldFolderPath, folderPath: newFolderPath }
+    } catch (err) {
+      let rollbackError = ''
+      if (folderRenamed && fs.existsSync(newFolderPath) && !fs.existsSync(oldFolderPath)) {
+        try {
+          fs.renameSync(newFolderPath, oldFolderPath)
+        } catch (rollbackErr) {
+          rollbackError = rollbackErr.message || String(rollbackErr)
+        }
+      }
+      return {
+        success: false,
+        error: 'RENAME_FAILED',
+        message: err.message || String(err),
+        rollbackError,
+        oldFolderPath,
+        newFolderPath,
+      }
+    }
   })
 
   ipcMain.handle('orders:delete', (_, userId, id, options = {}) => {

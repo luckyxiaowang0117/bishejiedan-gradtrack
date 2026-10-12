@@ -44,6 +44,7 @@ function createTables() {
       orderCode TEXT DEFAULT '',
       groupChatName TEXT DEFAULT '',
       specialService TEXT DEFAULT '',
+      packageTier TEXT DEFAULT '',
       includesDesign INTEGER DEFAULT 0,
       receiver TEXT DEFAULT '本人',
       handler TEXT DEFAULT '本人',
@@ -183,6 +184,11 @@ function runMigrations() {
     if (!latestCols2.find(c => c.name === col.name)) {
       db.exec(`ALTER TABLE Orders ADD COLUMN ${col.name} ${col.def}`)
     }
+  }
+
+  const packageCols = db.prepare("PRAGMA table_info(Orders)").all()
+  if (!packageCols.find(c => c.name === 'packageTier')) {
+    db.exec("ALTER TABLE Orders ADD COLUMN packageTier TEXT DEFAULT ''")
   }
 
   // Migrate old isHandlerPaid=1 data to handlerPaidAmount

@@ -47,7 +47,7 @@ def compute_new_folder_path(root_dir, order):
     uni_name = sanitize_path_part(order["university"])
     major_name = sanitize_path_part(order["major"])
     student_name = sanitize_path_part(order["studentName"])
-    title = sanitize_path_part(order["title"]) or "未命名项目"
+    title = sanitize_path_part(order["title"]) or "题目暂未确认"
 
     # 从旧路径中提取年份，或使用 createdAt
     year = "2026"

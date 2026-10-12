@@ -173,6 +173,12 @@
           </button>
         </div>
 
+        <el-checkbox
+          class="title-missing-filter"
+          :model-value="titleMissingOnly"
+          @update:model-value="$emit('title-missing-change', $event)"
+        >仅看待补充题目订单</el-checkbox>
+
         <div class="list-organizer">
           <div class="organizer-field">
             <span class="organizer-label">排序</span>
@@ -252,13 +258,19 @@
               @click="$emit('select', order.id)"
             >
               <div class="card-top">
-                <h3 class="card-title">{{ order.title }}</h3>
+                <h3 class="card-title">{{ order.title || '待客户确认题目' }}</h3>
                 <span
                   class="type-badge"
                   :style="{ color: (orderTypeMap[order.orderType || 'thesis'] || {}).color, background: (orderTypeMap[order.orderType || 'thesis'] || {}).color + '14' }"
                 >{{ (orderTypeMap[order.orderType || 'thesis'] || {}).label }}</span>
               </div>
               <div v-if="order.orderCode" class="card-order-code">{{ order.orderCode }}</div>
+
+              <div v-if="order.packageTier" class="card-package" :class="'package-' + getPackageMeta(order.packageTier).key">
+                <span class="card-package-icon">{{ getPackageMeta(order.packageTier).icon }}</span>
+                <span class="card-package-code">{{ getPackageMeta(order.packageTier).code }}</span>
+                <strong>{{ getPackageMeta(order.packageTier).label }}</strong>
+              </div>
 
               <div v-if="(order.orderType || 'thesis') === 'special'" class="card-special-service">
                 <span class="card-special-label">服务项目:</span>
@@ -283,6 +295,9 @@
 
               <div class="card-bottom">
                 <div class="card-badges">
+                  <span v-if="!String(order.title || '').trim()" class="badge badge-warning">
+                    <el-icon :size="12"><WarningFilled /></el-icon> 待补充题目
+                  </span>
                   <span v-if="order.isDraftSubmitted && (order.revisionCount || 0) === 0" class="badge badge-success">
                     <el-icon :size="12"><Check /></el-icon> 已交付初稿
                   </span>
@@ -315,10 +330,10 @@
                   <span v-if="order.totalAmount > order.paidAmount" class="badge badge-unpaid">
                     <el-icon :size="12"><Money /></el-icon> 尾款未结清
                   </span>
-                  <span v-if="(order.dispatchAmount || 0) > 0 && (order.handlerPaidAmount || 0) >= order.dispatchAmount" class="badge badge-handler-paid">
+                  <span v-if="!isSelfHandler(order) && (order.dispatchAmount || 0) > 0 && (order.handlerPaidAmount || 0) >= order.dispatchAmount" class="badge badge-handler-paid">
                     <el-icon :size="12"><Check /></el-icon> 已结清{{ order.handler ? ' ' + order.handler : '' }}
                   </span>
-                  <span v-else-if="(order.dispatchAmount || 0) > 0 && (order.handlerPaidAmount || 0) < order.dispatchAmount" class="badge badge-handler-unpaid">
+                  <span v-else-if="!isSelfHandler(order) && (order.dispatchAmount || 0) > 0 && (order.handlerPaidAmount || 0) < order.dispatchAmount" class="badge badge-handler-unpaid">
                     <el-icon :size="12"><Money /></el-icon> 待付{{ order.handler ? ' ' + order.handler : '' }} ¥{{ (order.dispatchAmount - (order.handlerPaidAmount || 0)).toFixed(0) }}
                   </span>
                   <span v-if="(order.refundAmount || 0) > 0" class="badge badge-refund">
@@ -394,6 +409,7 @@ const props = defineProps({
   receivers: Array,
   handlerFilter: String,
   handlers: Array,
+  titleMissingOnly: Boolean,
   badgeCounts: Object,
   sortMode: String,
   groupMode: String,
@@ -420,6 +436,7 @@ defineEmits([
   'major-change',
   'receiver-change',
   'handler-change',
+  'title-missing-change',
   'sort-change',
   'group-change',
   'reset-filters',
@@ -462,6 +479,7 @@ const hasActiveFilters = computed(() =>
   props.majorFilter !== 'all' ||
   props.receiverFilter !== 'all' ||
   props.handlerFilter !== 'all' ||
+  props.titleMissingOnly ||
   props.filter !== 'all' ||
   (props.search && props.search.trim() !== '')
 )
@@ -501,6 +519,21 @@ const orderTypeMap = {
   design: { label: '设计定制', color: '#8b5cf6' },
   reduction: { label: '论文降重', color: '#10b981' },
   special: { label: '特殊订单', color: '#ef4444' },
+}
+
+const packageMetaMap = {
+  budget: { key: 'budget', icon: '¥', code: '套餐1', label: '省钱套餐' },
+  carefree: { key: 'carefree', icon: '✓', code: '套餐2', label: '省心套餐' },
+  vip: { key: 'vip', icon: '★', code: '套餐3', label: '超级VIP套餐' },
+}
+
+function getPackageMeta(packageTier) {
+  return packageMetaMap[packageTier] || packageMetaMap.budget
+}
+
+function isSelfHandler(order) {
+  const handler = String(order?.handler || '').trim()
+  return !handler || handler === '本人'
 }
 
 function hexToRgba(hex, alpha) {
@@ -930,6 +963,12 @@ function getStatus(order) {
   gap: 5px;
 }
 
+.title-missing-filter {
+  margin-top: 8px;
+  color: #b45309;
+  font-size: 12px;
+}
+
 .filter-pill {
   padding: 5px 10px;
   border-radius: 20px;
@@ -1229,6 +1268,28 @@ function getStatus(order) {
   white-space: nowrap;
   letter-spacing: 0;
 }
+
+.card-package {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.card-package-icon,
+.card-package-code {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.card-package.package-budget { color: #047857; background: #ecfdf5; border-color: #a7f3d0; }
+.card-package.package-carefree { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
+.card-package.package-vip { color: #b45309; background: #fffbeb; border-color: #fde68a; }
 
 .card-school {
   font-size: var(--gt-text-xs);

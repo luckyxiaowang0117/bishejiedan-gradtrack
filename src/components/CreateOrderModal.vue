@@ -41,7 +41,7 @@
 
           <div class="column-card">
             <div class="column-title">项目信息</div>
-            <el-form-item :label="titleLabel + ' *'">
+            <el-form-item :label="titleLabel">
               <el-input v-model="form.title" :placeholder="titlePlaceholder" />
             </el-form-item>
 
@@ -138,6 +138,14 @@
               </el-form-item>
             </div>
 
+            <el-form-item label="套餐方案" class="package-tier-field">
+              <el-select v-model="form.packageTier" placeholder="请选择套餐（非必选）" clearable style="width: 100%">
+                <el-option label="套餐1 · 省钱套餐" value="budget" />
+                <el-option label="套餐2 · 省心套餐" value="carefree" />
+                <el-option label="套餐3 · 超级VIP套餐" value="vip" />
+              </el-select>
+            </el-form-item>
+
             <div v-if="showDesignFields" class="form-grid form-grid-3">
               <el-form-item label="设计类型">
                 <el-select v-model="form.designType" placeholder="选择类型" style="width: 100%" @change="onDesignTypeChange">
@@ -159,14 +167,14 @@
 
           <div class="column-card">
             <div class="column-title">金额信息</div>
-            <div class="form-grid form-grid-3">
+            <div class="form-grid" :class="isSelfHandler ? 'form-grid-2' : 'form-grid-3'">
               <el-form-item label="全款金额 (元)">
                 <el-input-number v-model="form.totalAmount" :min="0" :precision="0" :step="100" controls-position="right" placeholder="全款金额" style="width: 100%" />
               </el-form-item>
               <el-form-item label="已收金额 (定金)">
                 <el-input-number v-model="form.paidAmount" :min="0" :precision="0" :step="100" controls-position="right" placeholder="已收金额" style="width: 100%" />
               </el-form-item>
-              <el-form-item label="派单金额 (元)">
+              <el-form-item v-if="!isSelfHandler" label="派单金额 (元)">
                 <el-input-number v-model="form.dispatchAmount" :min="0" :precision="0" :step="100" controls-position="right" placeholder="支付给处理人" style="width: 100%" />
               </el-form-item>
             </div>
@@ -195,7 +203,7 @@
 
 <script setup>
 import { ref, watch, computed, onMounted, onUnmounted, nextTick, inject } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const props = defineProps({ visible: Boolean, order: Object })
 const emit = defineEmits(['update:visible', 'saved'])
@@ -236,6 +244,10 @@ const graduationYearOptions = computed(() => {
 })
 
 const showDesignFields = computed(() => form.value.orderType === 'design' || (form.value.orderType === 'thesis' && form.value.includesDesign))
+const isSelfHandler = computed(() => {
+  const handler = String(form.value.handler || '').trim()
+  return !handler || handler === '本人'
+})
 const titleLabel = computed(() => {
   const map = {
     thesis: '论文题目',
@@ -431,6 +443,7 @@ const defaultForm = () => ({
   includesDesign: 0, designType: '', designSubType: '', designStatus: '',
   formatMode: '', hasOriginalText: 0, specialService: '',
   receiver: '', handler: '', advisor: '',
+  packageTier: '',
   deadline: '', totalAmount: undefined, paidAmount: undefined, dispatchAmount: undefined,
   graduationYear: getCurrentGraduationYear(),
 })
@@ -447,9 +460,12 @@ const typeSubDirMap = {
 const folderPreview = computed(() => {
   const year = Number(form.value.graduationYear) || new Date().getFullYear()
   const uni = form.value.university || '学校名称'
-  const title = form.value.title || '项目名称'
+  const major = form.value.major || '专业名称'
+  const title = form.value.title.trim() || '题目暂未确认'
+  const student = form.value.studentName.trim()
+  const folderName = student ? `${year}-${student}-${title}` : `${year}-${title}`
   const subDir = typeSubDirMap[form.value.orderType] || '毕业设计'
-  return `${year}届/${subDir}/${uni}/${year}-${title}`
+  return `${year}届/${subDir}/${uni}/${major}专业/${folderName}`
 })
 
 watch(() => props.visible, (val) => {
@@ -481,6 +497,7 @@ watch(() => props.visible, (val) => {
         receiver: props.order.receiver === '本人' ? '' : (props.order.receiver || ''),
         handler: props.order.handler === '本人' ? '' : (props.order.handler || ''),
         advisor: props.order.advisor || '',
+        packageTier: props.order.packageTier || '',
         deadline: props.order.deadline || '',
         totalAmount: props.order.totalAmount || undefined,
         paidAmount: props.order.paidAmount || undefined,
@@ -518,8 +535,38 @@ function closeDialog() {
   emit('update:visible', false)
 }
 
+function sanitizeFolderPart(value, fallback = '') {
+  return String(value || fallback || '').trim().replace(/[<>:"/\\|?*]/g, '_')
+}
+
+function getOrderFolderName(order) {
+  const year = Number(order.graduationYear) || getCurrentGraduationYear()
+  const student = sanitizeFolderPart(order.studentName)
+  const title = sanitizeFolderPart(order.title, '题目暂未确认') || '题目暂未确认'
+  return student ? `${year}-${student}-${title}` : `${year}-${title}`
+}
+
+function getOrderFolderPathPreview(currentPath, order) {
+  const normalized = String(currentPath || '')
+  const separatorIndex = Math.max(normalized.lastIndexOf('\\'), normalized.lastIndexOf('/'))
+  if (separatorIndex < 0) return getOrderFolderName(order)
+  return `${normalized.slice(0, separatorIndex + 1)}${getOrderFolderName(order)}`
+}
+
+function getFolderUpdateError(result) {
+  const messages = {
+    ORDER_NOT_FOUND: '未找到需要更新的订单。',
+    ROOT_DIR_NOT_SET: '尚未设置项目根目录，无法修改文件夹名称。',
+    SOURCE_NOT_FOUND: '原项目文件夹不存在，无法修改名称。',
+    OUTSIDE_ROOT: '项目文件夹不在当前根目录中，已拒绝自动修改。',
+    TARGET_EXISTS: '目标文件夹名称已经存在，无法覆盖。',
+    RENAME_FAILED: '文件夹可能被占用或当前账号没有修改权限。',
+  }
+  const base = messages[result?.error] || result?.message || '文件夹名称修改失败。'
+  return result?.rollbackError ? `${base}\n目录恢复失败：${result.rollbackError}` : base
+}
+
 async function handleSave() {
-  if (!form.value.title.trim()) return ElMessage.warning('请填写项目题目')
   if (!form.value.deadline) return ElMessage.warning('请选择交稿日期')
   if (!form.value.university && !isEditing.value) {
     return ElMessage.warning('请填写学校名称')
@@ -528,7 +575,7 @@ async function handleSave() {
   try {
     const payload = {
       orderType: form.value.orderType || 'thesis',
-      title: form.value.title,
+      title: form.value.title.trim(),
       university: form.value.university || '',
       college: form.value.college || '',
       major: form.value.major || '',
@@ -545,10 +592,11 @@ async function handleSave() {
       receiver: form.value.receiver || '本人',
       handler: form.value.handler || '本人',
       advisor: form.value.advisor || '',
+      packageTier: form.value.packageTier || '',
       deadline: form.value.deadline,
       totalAmount: Number(form.value.totalAmount) || 0,
       paidAmount: Number(form.value.paidAmount) || 0,
-      dispatchAmount: Number(form.value.dispatchAmount) || 0,
+      dispatchAmount: isSelfHandler.value ? 0 : (Number(form.value.dispatchAmount) || 0),
       graduationYear: Number(form.value.graduationYear) || getCurrentGraduationYear(),
     }
     if (!currentUser.value || !currentUser.value.id) {
@@ -556,7 +604,63 @@ async function handleSave() {
       return
     }
     if (isEditing.value) {
-      await api.updateOrder(currentUser.value.id, props.order.id, payload)
+      const oldHandlerIsSelf = !String(props.order.handler || '').trim() || props.order.handler === '本人'
+      const clearingHandlerSettlement = !oldHandlerIsSelf && isSelfHandler.value
+        && ((Number(props.order.dispatchAmount) || 0) > 0 || (Number(props.order.handlerPaidAmount) || 0) > 0)
+      if (clearingHandlerSettlement) {
+        try {
+          await ElMessageBox.confirm(
+            '处理人已改为本人，保存后将清空原派单金额和处理人已付金额。是否继续？',
+            '确认改为本人处理',
+            { confirmButtonText: '清空并保存', cancelButtonText: '返回修改', type: 'warning' },
+          )
+        } catch {
+          return
+        }
+      }
+
+      if (isSelfHandler.value) {
+        payload.handlerPaidAmount = 0
+        payload.isHandlerPaid = 0
+      }
+
+      const oldTitle = String(props.order.title || '').trim()
+      const titleChanged = oldTitle !== payload.title
+      let renameFolder = titleChanged && !!props.order.folderPath && !oldTitle && !!payload.title
+      if (titleChanged && props.order.folderPath && oldTitle) {
+        try {
+          await ElMessageBox.confirm(
+            `题目已修改。\n\n当前文件夹：${props.order.folderPath}\n修改后文件夹：${getOrderFolderPathPreview(props.order.folderPath, payload)}\n\n是否同步修改文件夹名称？`,
+            '题目与文件夹名称联动',
+            {
+              confirmButtonText: '修改文件夹并保存',
+              cancelButtonText: '不修改文件夹，仅保存',
+              distinguishCancelAndClose: true,
+              closeOnClickModal: false,
+              type: 'warning',
+            },
+          )
+          renameFolder = true
+        } catch (action) {
+          if (action === 'cancel') renameFolder = false
+          else return
+        }
+      }
+
+      const result = await api.updateOrderWithFolder(currentUser.value.id, props.order.id, payload, renameFolder)
+      if (!result?.success) {
+        if (!renameFolder) throw new Error(getFolderUpdateError(result))
+        try {
+          await ElMessageBox.confirm(
+            `${getFolderUpdateError(result)}\n\n是否仅保存订单信息，并保留当前文件夹名称？`,
+            '文件夹名称未修改',
+            { confirmButtonText: '仅保存订单信息', cancelButtonText: '返回处理', type: 'warning' },
+          )
+          await api.updateOrder(currentUser.value.id, props.order.id, payload)
+        } catch {
+          return
+        }
+      }
     } else {
       const newId = await api.createOrder({ ...payload, userId: currentUser.value.id, folderPath: '' })
       const rootDir = await api.getSetting('rootDirectory')

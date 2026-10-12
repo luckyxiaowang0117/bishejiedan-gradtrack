@@ -64,7 +64,7 @@
           <div class="kpi-info">
             <div class="kpi-value">{{ data.totalOrders }}</div>
             <div class="kpi-label">总订单数</div>
-            <div class="kpi-sub">已完成 {{ data.completedCount }} 单</div>
+            <div class="kpi-sub">已完成 {{ data.completedCount }} 单 · 待补题目 {{ data.titleMissingCount || 0 }} 单</div>
           </div>
         </div>
         <div class="kpi-card">
@@ -238,7 +238,7 @@
                 :class="kpiFilter === 'unpaid' ? 'handler-order-6col' : 'handler-order-5col'"
                 @click="$emit('navigate-order', o.id)"
               >
-                <span class="week-order-title">{{ o.title }}</span>
+                <span class="week-order-title">{{ o.title || '待补充题目' }}</span>
                 <span class="receiver-tag">{{ o.receiver || '本人' }}</span>
                 <span :style="{ color: typeColorMap[o.orderType] }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
                 <template v-if="kpiFilter === 'unpaid'">
@@ -293,7 +293,7 @@
               <span>订单名称</span><span>类型</span><span>派单金额</span><span>状态</span>
             </div>
             <div v-for="o in handlerData.week.orders" :key="o.id" class="week-order-row" @click="$emit('navigate-order', o.id)">
-              <span class="week-order-title">{{ o.title }}</span>
+              <span class="week-order-title">{{ o.title || '待补充题目' }}</span>
               <span :style="{ color: typeColorMap[o.orderType] }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
               <span>¥{{ fmt(o.dispatchAmount) }}</span>
               <el-tag :type="(o.handlerPaidAmount || 0) >= (o.dispatchAmount || 0) && o.dispatchAmount > 0 ? 'success' : 'warning'" size="small" effect="plain">
@@ -520,7 +520,7 @@ const loadingWeek = ref(false)
 
 const handlerList = computed(() => {
   if (!data.value) return []
-  return data.value.byHandler.map(h => h.name)
+  return data.value.byHandler.map(h => h.name).filter(name => name && name !== '本人')
 })
 
 const kpiFilter = ref('')

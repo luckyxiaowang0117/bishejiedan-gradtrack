@@ -30,7 +30,8 @@
                 class="order-type-tag"
                 :style="{ color: orderTypeMeta.color, background: orderTypeMeta.color + '14', borderColor: orderTypeMeta.color + '30' }"
               >{{ orderTypeMeta.label }}</span>
-              <h2 class="project-title">{{ order.title }}</h2>
+              <h2 class="project-title">{{ order.title || '待客户确认题目' }}</h2>
+              <el-tag v-if="!String(order.title || '').trim()" type="warning" effect="plain" size="small">待补充题目</el-tag>
             </div>
 
             <!-- Design status badge -->
@@ -58,6 +59,12 @@
                 </template>
               </el-dropdown>
             </div>
+          </div>
+
+          <div v-if="order.packageTier" class="package-summary" :class="'package-' + packageMeta.key">
+            <span class="package-summary-icon">{{ packageMeta.icon }}</span>
+            <span class="package-summary-code">{{ packageMeta.code }}</span>
+            <strong>{{ packageMeta.label }}</strong>
           </div>
 
           <!-- Breadcrumb: school/college/major -->
@@ -149,6 +156,13 @@
                   <el-icon v-if="order.groupChatName" class="copy-icon" :size="12"><CopyDocument /></el-icon>
                 </div>
               </div>
+              <div class="info-cell">
+                <div class="cell-label">套餐方案</div>
+                <div v-if="order.packageTier" class="cell-value package-detail-value" :class="'package-' + packageMeta.key">
+                  <span>{{ packageMeta.icon }}</span>{{ packageMeta.code }} · {{ packageMeta.label }}
+                </div>
+                <div v-else class="cell-value text-muted">未选择套餐</div>
+              </div>
             </div>
 
             <!-- Finance Section -->
@@ -175,7 +189,7 @@
                     一键结清
                   </el-button>
                 </div>
-                <div class="fin-grid fin-grid-4">
+                <div class="fin-grid" :class="isSelfHandler ? 'fin-grid-3' : 'fin-grid-4'">
                   <div class="fin-cell">
                     <span class="fin-num">¥{{ order.totalAmount || 0 }}</span>
                     <span class="fin-lbl">全款金额</span>
@@ -190,7 +204,7 @@
                     </span>
                     <span class="fin-lbl">尾款</span>
                   </div>
-                  <div class="fin-cell">
+                  <div v-if="!isSelfHandler" class="fin-cell">
                     <span class="fin-num">¥{{ order.dispatchAmount || 0 }}</span>
                     <span class="fin-lbl">派单金额</span>
                   </div>
@@ -204,7 +218,7 @@
               </div>
 
               <!-- 结算卡片 -->
-              <div v-if="(order.dispatchAmount || 0) > 0" class="fin-card fin-card-settle">
+              <div v-if="!isSelfHandler && (order.dispatchAmount || 0) > 0" class="fin-card fin-card-settle">
                 <div class="fin-card-header">
                   <span class="fin-card-icon fin-icon-settle"><el-icon :size="14"><Coin /></el-icon></span>
                   <span class="fin-card-title">处理人结算</span>
@@ -335,6 +349,20 @@ const orderTypeMap = {
   special: { label: '特殊订单', color: '#ef4444' },
 }
 const orderTypeMeta = computed(() => orderTypeMap[props.order.orderType] || orderTypeMap.thesis)
+
+const packageMeta = computed(() => {
+  const packageMetaMap = {
+    budget: { key: 'budget', icon: '¥', code: '套餐1', label: '省钱套餐' },
+    carefree: { key: 'carefree', icon: '✓', code: '套餐2', label: '省心套餐' },
+    vip: { key: 'vip', icon: '★', code: '套餐3', label: '超级VIP套餐' },
+  }
+  return packageMetaMap[props.order.packageTier] || packageMetaMap.budget
+})
+
+const isSelfHandler = computed(() => {
+  const handler = String(props.order.handler || '').trim()
+  return !handler || handler === '本人'
+})
 
 const revisions = ref([])
 const designTypeDefs = ref([])
@@ -544,7 +572,7 @@ async function handleDelete() {
     const folderPath = props.order.folderPath || ''
     if (folderPath) {
       await ElMessageBox.confirm(
-        `确定删除「${props.order.title}」？\n\n检测到本地项目文件夹：\n${folderPath}\n\n选择“删除订单和文件夹”会同时移除本地资料；选择“仅删除订单”会保留文件夹。`,
+        `确定删除「${props.order.title || '待客户确认题目'}」？\n\n检测到本地项目文件夹：\n${folderPath}\n\n选择“删除订单和文件夹”会同时移除本地资料；选择“仅删除订单”会保留文件夹。`,
         '删除项目',
         {
           type: 'warning',
@@ -557,7 +585,7 @@ async function handleDelete() {
       deleteFolder = true
     } else {
       await ElMessageBox.confirm(
-        `确定删除「${props.order.title}」？此操作会删除软件中的订单、修改记录和反馈项。`,
+        `确定删除「${props.order.title || '待客户确认题目'}」？此操作会删除软件中的订单、修改记录和反馈项。`,
         '删除项目',
         {
           type: 'warning',
@@ -723,6 +751,35 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   align-items: flex-start;
   gap: 16px;
   margin-bottom: calc(var(--gt-card-gap) - 4px);
+}
+
+.package-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  margin: 10px 0 2px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.package-summary-icon,
+.package-summary-code { font-weight: 700; }
+.package-summary.package-budget,
+.package-detail-value.package-budget { color: #047857; background: #ecfdf5; border-color: #a7f3d0; }
+.package-summary.package-carefree,
+.package-detail-value.package-carefree { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
+.package-summary.package-vip,
+.package-detail-value.package-vip { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+
+.package-detail-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
 }
 
 .title-area {
@@ -1016,6 +1073,7 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   gap: 6px;
 }
 .fin-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.fin-grid-3 { grid-template-columns: repeat(3, 1fr); }
 .fin-grid-2 { grid-template-columns: repeat(2, 1fr); }
 
 .fin-cell {

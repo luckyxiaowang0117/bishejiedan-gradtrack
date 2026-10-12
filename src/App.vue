@@ -26,6 +26,7 @@
       :receivers="allReceivers"
       :handler-filter="handlerFilter"
       :handlers="allHandlers"
+      :title-missing-only="titleMissingOnly"
       :badge-counts="badgeCounts"
       :sort-mode="sortMode"
       :group-mode="groupMode"
@@ -43,6 +44,7 @@
       @major-change="majorFilter = $event"
       @receiver-change="receiverFilter = $event"
       @handler-change="handlerFilter = $event"
+      @title-missing-change="titleMissingOnly = $event"
       @sort-change="sortMode = $event"
       @group-change="groupMode = $event"
       @reset-filters="handleResetFilters"
@@ -149,6 +151,7 @@ const SORT_OPTIONS = [
   { key: 'balance_desc', label: '尾款金额从高到低' },
   { key: 'todo_first', label: '待修改优先' },
   { key: 'unpaid_first', label: '未结清优先' },
+  { key: 'title_missing_first', label: '待补充题目优先' },
 ]
 
 const GROUP_OPTIONS = [
@@ -226,6 +229,7 @@ const universityFilter = ref('all')
 const majorFilter = ref('all')
 const receiverFilter = ref('all')
 const handlerFilter = ref('all')
+const titleMissingOnly = ref(false)
 const showCreateModal = ref(false)
 const editingOrder = ref(null)
 const showSettings = ref(false)
@@ -427,6 +431,7 @@ function handleGraduationYearChange(val) {
   majorFilter.value = 'all'
   receiverFilter.value = 'all'
   handlerFilter.value = 'all'
+  titleMissingOnly.value = false
   filter.value = 'all'
   loadOrders()
 }
@@ -442,6 +447,7 @@ function handleResetFilters() {
   majorFilter.value = 'all'
   receiverFilter.value = 'all'
   handlerFilter.value = 'all'
+  titleMissingOnly.value = false
   filter.value = 'all'
   search.value = ''
 }
@@ -459,6 +465,9 @@ const preFilteredOrders = computed(() => {
   }
   if (handlerFilter.value && handlerFilter.value !== 'all') {
     result = result.filter(o => (o.handler || '本人') === handlerFilter.value)
+  }
+  if (titleMissingOnly.value) {
+    result = result.filter(o => !String(o.title || '').trim())
   }
   return result
 })
@@ -568,6 +577,7 @@ function getListPreferenceKey(userId) {
 async function loadListPreferences(userId) {
   isHydratingListState.value = true
   prefsReady.value = false
+  titleMissingOnly.value = false
 
   try {
     const raw = await api.getSetting(getListPreferenceKey(userId))
@@ -576,6 +586,7 @@ async function loadListPreferences(userId) {
       if (typeof parsed.filter === 'string') filter.value = parsed.filter
       if (typeof parsed.sortMode === 'string') sortMode.value = parsed.sortMode
       if (typeof parsed.groupMode === 'string') groupMode.value = parsed.groupMode
+      if (typeof parsed.titleMissingOnly === 'boolean') titleMissingOnly.value = parsed.titleMissingOnly
     }
   } catch {}
 
@@ -589,6 +600,7 @@ async function persistListPreferences() {
     filter: filter.value,
     sortMode: sortMode.value,
     groupMode: groupMode.value,
+    titleMissingOnly: titleMissingOnly.value,
   })
   await api.setSetting(getListPreferenceKey(currentUser.value.id), payload)
 }
@@ -778,7 +790,7 @@ watch(graduationYearFilter, () => {
   if (!isHydratingListState.value && isLoggedIn.value) loadOrders()
 })
 
-watch([filter, sortMode, groupMode], () => {
+watch([filter, sortMode, groupMode, titleMissingOnly], () => {
   persistListPreferences()
 })
 </script>
