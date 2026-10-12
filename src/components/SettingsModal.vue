@@ -33,7 +33,7 @@
           <el-icon :size="18" color="#0f766e"><SetUp /></el-icon>
           <div>
             <div class="section-title">订单编号规则</div>
-            <div class="section-desc">设置自动生成订单编号时使用的固定前缀与业务简写</div>
+            <div class="section-desc">固定前缀与各服务类型的默认编码</div>
           </div>
         </div>
         <div class="order-code-fields">
@@ -46,12 +46,12 @@
               @change="persistOrderCodeSettings"
             />
           </el-form-item>
-          <el-form-item label="业务简写（选填）">
+          <el-form-item v-for="service in orderCodeTypes" :key="service.code" :label="service.label + '（' + service.code + '）'">
             <el-input
-              v-model="orderCodeServiceCode"
+              v-model="orderCodeServiceCodes[service.code]"
               maxlength="12"
-              placeholder="例: SS"
-              @input="orderCodeServiceCode = normalizeOrderCodeSegment($event)"
+              :placeholder="service.code"
+              @input="orderCodeServiceCodes[service.code] = normalizeOrderCodeSegment($event)"
               @change="persistOrderCodeSettings"
             />
           </el-form-item>
@@ -60,7 +60,7 @@
           <span>编号预览</span>
           <code>{{ orderCodePreview }}</code>
         </div>
-        <div class="order-code-note">业务简写留空时，将继续根据订单类型自动使用 BS、BP、FM 等现有简写。</div>
+        <div class="order-code-note">留空恢复该类型默认编码；已有订单编号保持不变。</div>
       </div>
 
       <!-- Section 2: Auto Launch -->
@@ -436,7 +436,19 @@ const requirePasswordOnStartup = ref(false)
 const requirePasswordOnTrayRestore = ref(false)
 const orderInfoDefaultExpanded = ref(false)
 const orderCodeFixedPrefix = ref('')
-const orderCodeServiceCode = ref('')
+const orderCodeTypes = [
+  { code: 'BS', label: '毕业设计（包含设计）' },
+  { code: 'BP', label: '毕业论文（不含设计）' },
+  { code: 'FM', label: '格式调整' },
+  { code: 'ET', label: '英文翻译' },
+  { code: 'SD', label: '设计定制' },
+  { code: 'PR', label: '论文降重' },
+  { code: 'KR', label: '开题报告' },
+  { code: 'FD', label: '图例绘制' },
+  { code: 'PP', label: 'PPT制作' },
+  { code: 'OS', label: '其他特殊服务' },
+]
+const orderCodeServiceCodes = ref({})
 const designTypes = ref([])
 const migrationBusy = ref(false)
 const syncBusy = ref(false)
@@ -485,7 +497,7 @@ const orderCodePreview = computed(() => {
   const parts = []
   if (orderCodeFixedPrefix.value) parts.push(orderCodeFixedPrefix.value)
   parts.push(String(getCurrentGraduationYear()))
-  parts.push(orderCodeServiceCode.value || 'BS')
+  parts.push(orderCodeServiceCodes.value.BS || 'BS')
   parts.push('0001')
   return parts.join('-')
 })
@@ -548,7 +560,9 @@ async function loadData() {
   requirePasswordOnTrayRestore.value = await api.getSetting('requirePasswordOnTrayRestore') === '1'
   orderInfoDefaultExpanded.value = await api.getSetting('orderInfoDefaultExpanded') === '1'
   orderCodeFixedPrefix.value = normalizeOrderCodeSegment(await api.getSetting('orderCodeFixedPrefix'))
-  orderCodeServiceCode.value = normalizeOrderCodeSegment(await api.getSetting('orderCodeServiceCode'))
+  let savedCodes = {}
+  try { savedCodes = JSON.parse(await api.getSetting('orderCodeServiceCodes') || '{}') || {} } catch {}
+  orderCodeServiceCodes.value = Object.fromEntries(orderCodeTypes.map(service => [service.code, normalizeOrderCodeSegment(savedCodes[service.code]) || service.code]))
   autoLaunch.value = await api.getAutoLaunch()
   const rows = await api.listDesignTypes()
   designTypes.value = rows.map(r => ({
@@ -585,10 +599,11 @@ async function handleOrderInfoDefaultChange(val) {
 
 async function persistOrderCodeSettings() {
   orderCodeFixedPrefix.value = normalizeOrderCodeSegment(orderCodeFixedPrefix.value)
-  orderCodeServiceCode.value = normalizeOrderCodeSegment(orderCodeServiceCode.value)
+  const codes = Object.fromEntries(orderCodeTypes.map(service => [service.code, normalizeOrderCodeSegment(orderCodeServiceCodes.value[service.code]) || service.code]))
+  orderCodeServiceCodes.value = codes
   await Promise.all([
     api.setSetting('orderCodeFixedPrefix', orderCodeFixedPrefix.value),
-    api.setSetting('orderCodeServiceCode', orderCodeServiceCode.value),
+    api.setSetting('orderCodeServiceCodes', JSON.stringify(codes)),
   ])
 }
 

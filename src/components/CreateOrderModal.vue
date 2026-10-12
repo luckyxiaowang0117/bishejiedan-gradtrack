@@ -47,13 +47,40 @@
 
             <div class="form-grid form-grid-3">
               <el-form-item label="学校名称 *">
-                <el-autocomplete v-model="form.university" :fetch-suggestions="(q, cb) => fetchSuggestions('university', q, cb)" placeholder="例: 华南理工大学" style="width: 100%" />
+                <el-autocomplete :ref="el => historyInputs['university'] = el" v-model="form.university" :fetch-suggestions="(q, cb) => fetchSuggestions('university', q, cb)" placeholder="例: 华南理工大学" style="width: 100%">
+                  <template #default="{ item }">
+                    <span class="history-suggestion">
+                      <el-button text circle size="small" title="移除历史记录" aria-label="移除历史记录" @mousedown.prevent.stop @click.prevent.stop="removeHistoryValue('university', item.value)">
+                        <el-icon><Remove /></el-icon>
+                      </el-button>
+                      <span>{{ item.value }}</span>
+                    </span>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
               <el-form-item label="学院">
-                <el-autocomplete v-model="form.college" :fetch-suggestions="(q, cb) => fetchSuggestions('college', q, cb)" placeholder="例: 机械工程学院" style="width: 100%" />
+                <el-autocomplete :ref="el => historyInputs['college'] = el" v-model="form.college" :fetch-suggestions="(q, cb) => fetchSuggestions('college', q, cb)" placeholder="例: 机械工程学院" style="width: 100%">
+                  <template #default="{ item }">
+                    <span class="history-suggestion">
+                      <el-button text circle size="small" title="移除历史记录" aria-label="移除历史记录" @mousedown.prevent.stop @click.prevent.stop="removeHistoryValue('college', item.value)">
+                        <el-icon><Remove /></el-icon>
+                      </el-button>
+                      <span>{{ item.value }}</span>
+                    </span>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
               <el-form-item label="专业">
-                <el-autocomplete v-model="form.major" :fetch-suggestions="(q, cb) => fetchSuggestions('major', q, cb)" placeholder="例: 机械电子工程" style="width: 100%" />
+                <el-autocomplete :ref="el => historyInputs['major'] = el" v-model="form.major" :fetch-suggestions="(q, cb) => fetchSuggestions('major', q, cb)" placeholder="例: 机械电子工程" style="width: 100%">
+                  <template #default="{ item }">
+                    <span class="history-suggestion">
+                      <el-button text circle size="small" title="移除历史记录" aria-label="移除历史记录" @mousedown.prevent.stop @click.prevent.stop="removeHistoryValue('major', item.value)">
+                        <el-icon><Remove /></el-icon>
+                      </el-button>
+                      <span>{{ item.value }}</span>
+                    </span>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
             </div>
 
@@ -71,13 +98,40 @@
 
             <div class="form-grid form-grid-3">
               <el-form-item label="接单人">
-                <el-autocomplete v-model="form.receiver" :fetch-suggestions="(q, cb) => fetchSuggestions('receiver', q, cb)" placeholder="本人" style="width: 100%" />
+                <el-autocomplete :ref="el => historyInputs['receiver'] = el" v-model="form.receiver" :fetch-suggestions="(q, cb) => fetchSuggestions('receiver', q, cb)" placeholder="本人" style="width: 100%">
+                  <template #default="{ item }">
+                    <span class="history-suggestion">
+                      <el-button text circle size="small" title="移除历史记录" aria-label="移除历史记录" @mousedown.prevent.stop @click.prevent.stop="removeHistoryValue('receiver', item.value)">
+                        <el-icon><Remove /></el-icon>
+                      </el-button>
+                      <span>{{ item.value }}</span>
+                    </span>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
               <el-form-item label="处理人">
-                <el-autocomplete v-model="form.handler" :fetch-suggestions="(q, cb) => fetchSuggestions('handler', q, cb)" placeholder="本人" style="width: 100%" />
+                <el-autocomplete :ref="el => historyInputs['handler'] = el" v-model="form.handler" :fetch-suggestions="(q, cb) => fetchSuggestions('handler', q, cb)" placeholder="本人" style="width: 100%">
+                  <template #default="{ item }">
+                    <span class="history-suggestion">
+                      <el-button text circle size="small" title="移除历史记录" aria-label="移除历史记录" @mousedown.prevent.stop @click.prevent.stop="removeHistoryValue('handler', item.value)">
+                        <el-icon><Remove /></el-icon>
+                      </el-button>
+                      <span>{{ item.value }}</span>
+                    </span>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
               <el-form-item v-if="form.orderType === 'thesis'" label="指导教师">
-                <el-autocomplete v-model="form.advisor" :fetch-suggestions="(q, cb) => fetchSuggestions('advisor', q, cb)" placeholder="教师姓名" style="width: 100%" />
+                <el-autocomplete :ref="el => historyInputs['advisor'] = el" v-model="form.advisor" :fetch-suggestions="(q, cb) => fetchSuggestions('advisor', q, cb)" placeholder="教师姓名" style="width: 100%">
+                  <template #default="{ item }">
+                    <span class="history-suggestion">
+                      <el-button text circle size="small" title="移除历史记录" aria-label="移除历史记录" @mousedown.prevent.stop @click.prevent.stop="removeHistoryValue('advisor', item.value)">
+                        <el-icon><Remove /></el-icon>
+                      </el-button>
+                      <span>{{ item.value }}</span>
+                    </span>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
             </div>
           </div>
@@ -272,6 +326,18 @@ const titlePlaceholder = computed(() => {
 })
 
 const historyCache = ref({})
+const historyInputs = {}
+
+async function removeHistoryValue(field, value) {
+  try {
+    const removed = await api.removeHistoryValue(currentUser.value.id, field, value)
+    if (!removed) return
+    historyCache.value[field] = (historyCache.value[field] || []).filter(item => item !== value)
+    historyInputs[field]?.getData(form.value[field] || '')
+  } catch {
+    ElMessage.error('移除历史记录失败，请重试')
+  }
+}
 
 function getMainPanelRect() {
   return document.querySelector('.main-panel')?.getBoundingClientRect() || null
@@ -693,6 +759,17 @@ async function handleSave() {
 </script>
 
 <style scoped>
+.history-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-suggestion > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 :deep(.el-form-item__label) {
   font-size: 12px;
   font-weight: 500;

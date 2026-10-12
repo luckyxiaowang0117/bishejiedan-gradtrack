@@ -448,12 +448,23 @@ function normalizeOrderCodeSegment(value, maxLength = 12) {
     .slice(0, maxLength)
 }
 
+const HISTORY_FIELDS = ['university', 'college', 'major', 'receiver', 'handler', 'advisor']
+
+function getHiddenHistoryValues(userId, field) {
+  try {
+    const values = JSON.parse(getSettingValue(`hiddenHistory:${userId}:${field}`) || '[]')
+    return Array.isArray(values) ? values.filter(value => typeof value === 'string') : []
+  } catch { return [] }
+}
+
 function getOrderCodeRule(order) {
   const fixedPrefix = normalizeOrderCodeSegment(getSettingValue('orderCodeFixedPrefix'))
-  const customServiceCode = normalizeOrderCodeSegment(getSettingValue('orderCodeServiceCode'))
+  const defaultCode = getOrderServiceCode(order)
+  let serviceCodes = {}
+  try { serviceCodes = JSON.parse(getSettingValue('orderCodeServiceCodes') || '{}') || {} } catch {}
   return {
     fixedPrefix,
-    serviceCode: customServiceCode || getOrderServiceCode(order),
+    serviceCode: normalizeOrderCodeSegment(serviceCodes[defaultCode]) || defaultCode,
   }
 }
 
@@ -2258,7 +2269,16 @@ function registerIpcHandlers() {
   ipcMain.handle('orders:distinctValues', (_, userId, field) => {
     const allowed = ['university', 'college', 'major', 'receiver', 'handler', 'advisor']
     if (!allowed.includes(field)) return []
-    return db.prepare(`SELECT DISTINCT ${field} AS val FROM Orders WHERE userId = ? AND ${field} != '' ORDER BY val ASC`).all(userId).map(r => r.val)
+    const hidden = getHiddenHistoryValues(userId, field)
+    return db.prepare(`SELECT DISTINCT ${field} AS val FROM Orders WHERE userId = ? AND ${field} != '' ORDER BY val ASC`).all(userId).map(r => r.val).filter(value => !hidden.includes(value))
+  })
+
+  ipcMain.handle('orders:removeHistoryValue', (_, userId, field, value) => {
+    if (!HISTORY_FIELDS.includes(field) || typeof value !== 'string' || !userId) return false
+    const hidden = getHiddenHistoryValues(userId, field)
+    if (!hidden.includes(value)) hidden.push(value)
+    setSettingValue(`hiddenHistory:${userId}:${field}`, JSON.stringify(hidden))
+    return true
   })
 
   ipcMain.handle('orders:create', (_, data) => {
@@ -2292,6 +2312,12 @@ function registerIpcHandlers() {
     }
     orderData.groupChatName = manualGroupChatName || orderData.orderCode
     const result = stmt.run(orderData)
+    for (const field of HISTORY_FIELDS) {
+      const hidden = getHiddenHistoryValues(orderData.userId, field)
+      if (hidden.includes(orderData[field])) {
+        setSettingValue(`hiddenHistory:${orderData.userId}:${field}`, JSON.stringify(hidden.filter(value => value !== orderData[field])))
+      }
+    }
     const orderRow = getOrderById(Number(result.lastInsertRowid))
     recordOrderSyncEvent('create', orderRow)
     return result.lastInsertRowid
