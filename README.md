@@ -22,7 +22,7 @@ npm run build:win
 - **订单文件夹**：新目录名包含订单编号，同类订单即使题目和姓名都为空也能使用独立目录。补题改名和删除时保护仍被其他订单引用的目录。
 - **历史目录修复**：在「设置 → 历史文件夹整理与拆分」预览并拆分共用的空目录。共享目录已有文件时会跳过，待确认资料归属。
 
-macOS 安装包见 [v6.4.1 GitHub Release](https://github.com/luckyxiaowang0117/bishejiedan-gradtrack/releases/tag/v6.4.1)。该构建使用临时签名，供本机安装测试。
+安装包见 [v6.4.1 GitHub Release](https://github.com/luckyxiaowang0117/bishejiedan-gradtrack/releases/tag/v6.4.1)。Windows 64 位请选择 `gradtrack-setup-6.4.1.exe`；Apple Silicon Mac 请选择 arm64 DMG，该构建使用临时签名，供本机安装测试。
 
 ## 6.4.0 升级亮点
 
