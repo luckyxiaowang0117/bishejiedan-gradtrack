@@ -98,6 +98,16 @@ function showMainWindowWithRestorePrivacy() {
   mainWindow.focus()
 }
 
+const isolatedProfile = process.env.GRADTRACK_USER_DATA
+if (isolatedProfile) {
+  const profilePath = path.resolve(isolatedProfile)
+  fs.mkdirSync(profilePath, { recursive: true })
+  app.setPath('userData', profilePath)
+}
+
+let quitting = false
+app.on('before-quit', () => { quitting = true })
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
@@ -165,6 +175,7 @@ function createWindow() {
 
   mainWindow.on('close', (event) => {
     persistWindowState(mainWindow)
+    if (quitting) return
     event.preventDefault()
     mainWindow.hide()
     if (!isMac && tray) {
@@ -187,8 +198,8 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (mainWindow) {
-      mainWindow.show()
-      mainWindow.focus()
+      if (mainWindow.isVisible()) mainWindow.focus()
+      else showMainWindowWithRestorePrivacy()
     } else {
       createWindow()
     }
@@ -233,8 +244,7 @@ function createTray() {
     {
       label: '退出程序',
       click: () => {
-        tray = null
-        app.exit(0)
+        app.quit()
       },
     },
   ])
@@ -266,22 +276,22 @@ function copyDirRecursive(src, dest) {
 function normalizeRootPath(rootPath) {
   if (!rootPath || typeof rootPath !== 'string') return ''
   const normalized = path.normalize(rootPath.trim())
-  return normalized.endsWith(path.sep) ? normalized.slice(0, -1) : normalized
+  return normalized !== path.parse(normalized).root && normalized.endsWith(path.sep)
+    ? normalized.slice(0, -1)
+    : normalized
 }
 
 function replacePathPrefix(oldRoot, newRoot, targetPath) {
   if (!targetPath || typeof targetPath !== 'string') return targetPath || ''
-  const oldNorm = normalizeRootPath(oldRoot)
-  const newNorm = normalizeRootPath(newRoot)
-  if (!oldNorm || !newNorm) return targetPath
-  const pathNorm = path.normalize(targetPath.trim())
-  const oldCheck = process.platform === 'win32' ? oldNorm.toLowerCase() : oldNorm
-  const pathCheck = process.platform === 'win32' ? pathNorm.toLowerCase() : pathNorm
-  if (pathCheck !== oldCheck && !pathCheck.startsWith(oldCheck + path.sep)) return targetPath
-  const relative = path.relative(oldNorm, pathNorm)
-  if (!relative || relative === '.') return newNorm
-  if (relative.startsWith('..')) return targetPath
-  return path.join(newNorm, relative)
+  if (!oldRoot || !newRoot) return targetPath
+  const windowsRoot = /^[A-Za-z]:[\\/]/.test(oldRoot) || oldRoot.startsWith('\\\\')
+  const sourcePath = windowsRoot ? path.win32 : path.posix
+  const oldNorm = sourcePath.normalize(oldRoot.trim())
+  const pathNorm = sourcePath.normalize(targetPath.trim())
+  if (!sourcePath.isAbsolute(oldNorm) || !sourcePath.isAbsolute(pathNorm)) return targetPath
+  const relative = sourcePath.relative(oldNorm, pathNorm)
+  if (sourcePath.isAbsolute(relative) || relative === '..' || relative.startsWith('..' + sourcePath.sep)) return targetPath
+  return path.join(newRoot, ...relative.split(sourcePath.sep))
 }
 
 function rewriteAttachmentsJson(attachmentsText, oldRoot, newRoot) {
@@ -529,12 +539,12 @@ function isSelfHandlerValue(value) {
 }
 
 function buildOrderFolderName(order) {
-  const folderYear = Number(order.graduationYear) || new Date().getFullYear()
+  const prefix = sanitizePathPart(order.orderCode) || String(Number(order.graduationYear) || new Date().getFullYear())
   const studentNamePart = sanitizePathPart(order.studentName)
   const sanitizedTitle = sanitizePathPart(order.title, '题目暂未确认') || '题目暂未确认'
   return studentNamePart
-    ? `${folderYear}-${studentNamePart}-${sanitizedTitle}`
-    : `${folderYear}-${sanitizedTitle}`
+    ? `${prefix}-${studentNamePart}-${sanitizedTitle}`
+    : `${prefix}-${sanitizedTitle}`
 }
 
 function buildGraduationOrderFolderPath(rootDirectory, order) {
@@ -545,6 +555,26 @@ function buildGraduationOrderFolderPath(rootDirectory, order) {
   const majorName = sanitizePathPart(order.major)
   const folderName = buildOrderFolderName(order)
   return path.join(rootDirectory, `${folderYear}届`, subDir, uniName, `${majorName}专业`, folderName)
+}
+
+function createOrderFolderContents(folderPath, order) {
+  const type = order.orderType || 'thesis'
+  if (['format', 'reduction', 'special'].includes(type)) {
+    fs.mkdirSync(path.join(folderPath, '客户源文件'), { recursive: true })
+    fs.mkdirSync(path.join(folderPath, '修改后文件'), { recursive: true })
+    fs.mkdirSync(path.join(folderPath, '客户要求'), { recursive: true })
+  } else if (type === 'translation') {
+    fs.mkdirSync(path.join(folderPath, '源文件'), { recursive: true })
+    fs.mkdirSync(path.join(folderPath, '交付文件'), { recursive: true })
+  } else {
+    fs.mkdirSync(path.join(folderPath, '论文文件', '外文翻译'), { recursive: true })
+    fs.mkdirSync(path.join(folderPath, '论文文件', '论文稿件'), { recursive: true })
+    fs.mkdirSync(path.join(folderPath, '论文文件', '论文稿件', '初稿'), { recursive: true })
+    fs.mkdirSync(path.join(folderPath, '客户提供的需求文件'), { recursive: true })
+    if (order.includesDesign || type === 'design') {
+      fs.mkdirSync(path.join(folderPath, '设计文件'), { recursive: true })
+    }
+  }
 }
 
 function isSamePath(left, right) {
@@ -661,8 +691,14 @@ function registerIpcHandlers() {
     return SHARED_SYNC_NAMESPACE
   }
 
+  function resolveSharedSyncDir(syncDir) {
+    return path.basename(syncDir) === getSharedSyncDirName()
+      ? syncDir
+      : path.join(syncDir, getSharedSyncDirName())
+  }
+
   function ensureSharedSyncDirs(syncDir) {
-    const baseDir = path.join(syncDir, getSharedSyncDirName())
+    const baseDir = resolveSharedSyncDir(syncDir)
     const eventsDir = path.join(baseDir, 'events')
     const assetsDir = path.join(baseDir, 'assets')
     ensureDir(eventsDir)
@@ -983,7 +1019,7 @@ function registerIpcHandlers() {
     }
   }
 
-  function createPortableEvent(eventRow, syncDir, assetsDir) {
+  function createPortableEvent(eventRow, assetsDir) {
     const payload = safeJsonParse(eventRow.payload, {})
     if (eventRow.entityType === 'feedback' && payload.feedback) {
       const rawAttachments = parseAttachments(payload.feedback.attachments)
@@ -995,7 +1031,7 @@ function registerIpcHandlers() {
           const syncName = `${eventRow.eventId}_${index}${ext || ''}`
           const targetPath = path.join(assetsDir, syncName)
           if (!fs.existsSync(targetPath)) fs.copyFileSync(sourcePath, targetPath)
-          att.syncAssetPath = path.relative(syncDir, targetPath)
+          att.syncAssetPath = [getSharedSyncDirName(), 'assets', syncName].join('/')
         }
         delete att.path
         return att
@@ -1027,12 +1063,18 @@ function registerIpcHandlers() {
     for (const item of portableAttachments) {
       const nextItem = { ...item }
       if (item.syncAssetPath) {
-        const assetPath = path.join(syncDir, item.syncAssetPath)
-        if (fs.existsSync(assetPath)) {
-          const copied = copyFileWithUniqueName(assetPath, localDir, item.name || path.basename(assetPath))
-          nextItem.path = copied.path
-          nextItem.name = copied.name
+        const relative = String(item.syncAssetPath).replace(/\\/g, '/')
+        const parts = relative.split('/')
+        if (parts.some(part => !part || part === '..' || part === '.' || part.includes(':'))) {
+          throw new Error('INVALID_SYNC_ASSET_PATH')
         }
+        if (parts[0] === getSharedSyncDirName()) parts.shift()
+        if (parts[0] !== 'assets' || parts.length < 2) throw new Error('INVALID_SYNC_ASSET_PATH')
+        const assetPath = path.join(resolveSharedSyncDir(syncDir), ...parts)
+        if (!fs.existsSync(assetPath)) throw new Error('同步附件尚未到达，请等待文件同步完成后重试')
+        const copied = copyFileWithUniqueName(assetPath, localDir, item.name || path.basename(assetPath))
+        nextItem.path = copied.path
+        nextItem.name = copied.name
       }
       delete nextItem.syncAssetPath
       localizedAttachments.push(nextItem)
@@ -1269,7 +1311,7 @@ function registerIpcHandlers() {
   }
 
   function hasAnyRemoteEvent(syncDir) {
-    const eventsDir = path.join(syncDir, getSharedSyncDirName(), 'events')
+    const eventsDir = path.join(resolveSharedSyncDir(syncDir), 'events')
     return listSyncEventFiles(eventsDir).length > 0
   }
 
@@ -1322,7 +1364,7 @@ function registerIpcHandlers() {
       ORDER BY datetime(createdAt) ASC
     `).all(userId, getSyncDeviceId())
     for (const row of pendingRows) {
-      const portableEvent = createPortableEvent(row, syncDir, assetsDir)
+      const portableEvent = createPortableEvent(row, assetsDir)
       fs.writeFileSync(path.join(eventsDir, `${row.eventId}.json`), JSON.stringify(portableEvent, null, 2), 'utf8')
       db.prepare('UPDATE SyncEvents SET exportedAt = ? WHERE eventId = ?').run(nowIso(), row.eventId)
     }
@@ -1346,7 +1388,12 @@ function registerIpcHandlers() {
         rawEvents.push(event)
       } catch {}
     }
-    rawEvents.sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')))
+    // Baseline events can share a millisecond. Apply parents before their children.
+    const entityOrder = { order: 0, revision: 1, feedback: 2 }
+    rawEvents.sort((a, b) => (
+      String(a.createdAt || '').localeCompare(String(b.createdAt || '')) ||
+      (entityOrder[a.entityType] ?? 3) - (entityOrder[b.entityType] ?? 3)
+    ))
     for (const event of rawEvents) {
       applyIncomingSyncEvent(event, userId, syncDir)
     }
@@ -1455,6 +1502,19 @@ function registerIpcHandlers() {
     }
   }
 
+  function findFolderOwners(folderPath, orderId = null) {
+    const target = fs.statSync(folderPath, { throwIfNoEntry: false })
+    return db.prepare("SELECT id, orderCode, folderPath FROM Orders WHERE folderPath <> ''").all()
+      .filter(order => {
+        if (order.id === orderId) return false
+        if (isSamePath(order.folderPath, folderPath)) return true
+        if (!target) return false
+        const other = fs.statSync(order.folderPath, { throwIfNoEntry: false })
+        return other && other.dev === target.dev && other.ino === target.ino
+      })
+      .map(order => order.orderCode)
+  }
+
   function buildGraduationFolderMigrationPreview(userId) {
     const rootDirectory = getRootDirectory()
     if (!userId) return { success: false, error: 'INVALID_USER' }
@@ -1467,6 +1527,7 @@ function registerIpcHandlers() {
     function pushSkipped(order, reason, detail = '') {
       skipped.push({
         orderId: order.id,
+        orderCode: order.orderCode,
         title: order.title || '未命名订单',
         graduationYear: order.graduationYear || 0,
         oldPath: order.folderPath || '',
@@ -1494,7 +1555,13 @@ function registerIpcHandlers() {
         pushSkipped(order, 'OUTSIDE_ROOT', '原路径不在当前根目录下')
         continue
       }
-      if (hasGraduationLayer(rootDirectory, oldPath, graduationYear)) {
+      const shared = findFolderOwners(oldPath, order.id).length > 0
+      if (shared && fs.readdirSync(oldPath, { recursive: true, withFileTypes: true })
+        .some(entry => !entry.isDirectory() && entry.name !== '.DS_Store')) {
+        pushSkipped(order, 'SHARED_FOLDER_HAS_FILES', '共享目录已有资料，请先确认文件归属')
+        continue
+      }
+      if (!shared && hasGraduationLayer(rootDirectory, oldPath, graduationYear)) {
         pushSkipped(order, 'ALREADY_MIGRATED', '路径中已包含对应毕业届目录')
         continue
       }
@@ -1504,13 +1571,14 @@ function registerIpcHandlers() {
         pushSkipped(order, 'SAME_PATH', '新旧路径一致')
         continue
       }
-      if (fs.existsSync(newPath)) {
+      if (fs.existsSync(newPath) || findFolderOwners(newPath, order.id).length > 0) {
         pushSkipped(order, 'TARGET_EXISTS', '目标文件夹已存在')
         continue
       }
 
       items.push({
         orderId: order.id,
+        orderCode: order.orderCode,
         title: order.title || '未命名订单',
         graduationYear,
         oldPath,
@@ -1539,12 +1607,16 @@ function registerIpcHandlers() {
     const failed = []
 
     for (const item of preview.items) {
+      let created = false
       try {
         if (fs.existsSync(item.newPath)) {
           failed.push({ ...item, error: '目标文件夹已存在' })
           continue
         }
 
+        fs.mkdirSync(path.dirname(item.newPath), { recursive: true })
+        fs.mkdirSync(item.newPath)
+        created = true
         copyDirRecursive(item.oldPath, item.newPath)
 
         const updateTxn = db.transaction(() => {
@@ -1558,6 +1630,7 @@ function registerIpcHandlers() {
         updateTxn()
         migrated.push(item)
       } catch (err) {
+        if (created) fs.rmSync(item.newPath, { recursive: true, force: true })
         failed.push({ ...item, error: err.message || String(err) })
       }
     }
@@ -1950,7 +2023,12 @@ function registerIpcHandlers() {
     if (localEventCount === 0 && !hasAnyRemoteEvent(syncDir)) {
       seedBaselineSyncEvents(userId)
     }
-    const imported = importSyncEvents(syncDir, userId)
+    let imported
+    try {
+      imported = importSyncEvents(syncDir, userId)
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
     const exported = exportPendingSyncEvents(syncDir, userId)
     const finishedAt = nowIso()
     setSettingValue(getSyncSettingKey('lastSuccessAt'), finishedAt)
@@ -2033,7 +2111,7 @@ function registerIpcHandlers() {
     if (!payload || payload.formatVersion !== 1 || !payload.data) {
       return { success: false, error: 'UNSUPPORTED_FORMAT' }
     }
-    const oldRoot = normalizeRootPath(oldRootOverride || payload.exportRoot || '')
+    const oldRoot = String(oldRootOverride || payload.exportRoot || '').trim()
     if (!oldRoot) return { success: false, error: 'MISSING_OLD_ROOT' }
     const normalizedNewRoot = normalizeRootPath(newRoot)
     const currentUser = ensureUserSyncScope(db.prepare('SELECT id, username, syncScope FROM Users WHERE id = ?').get(currentUserId))
@@ -2282,45 +2360,74 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('orders:create', (_, data) => {
-    const stmt = db.prepare(`
-      INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, orderCode, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, packageTier, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, syncUuid)
-      VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @orderCode, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @packageTier, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, 0, @folderPath, @graduationYear, datetime('now'), @syncUuid)
-    `)
-    const now = new Date()
-    const defaultGradYear = now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear()
-    const orderData = {
-      designType: '', designSubType: '', designStatus: '',
-      orderType: 'thesis', formatMode: '', packageTier: '', hasOriginalText: 0, specialService: '',
-      dispatchAmount: 0, graduationYear: defaultGradYear, syncUuid: makeSyncId(),
-      ...data,
-    }
-    orderData.packageTier = normalizePackageTier(orderData.packageTier)
-    if (isSelfHandlerValue(orderData.handler)) {
-      orderData.handler = '本人'
-      orderData.dispatchAmount = 0
-    }
-    const manualGroupChatName = String(orderData.groupChatName || '').trim()
-    orderData.orderCode = String(orderData.orderCode || '').trim()
-      || manualGroupChatName
-      || generateNextOrderCode(orderData.userId, orderData, now)
-    const duplicateOrder = db.prepare(`
-      SELECT id FROM Orders
-      WHERE userId = ? AND orderCode = ? COLLATE NOCASE
-    `).get(orderData.userId, orderData.orderCode)
-    if (duplicateOrder) {
-      throw new Error(`订单编号“${orderData.orderCode}”已存在，请检查群聊名称或使用其他编号。`)
-    }
-    orderData.groupChatName = manualGroupChatName || orderData.orderCode
-    const result = stmt.run(orderData)
-    for (const field of HISTORY_FIELDS) {
-      const hidden = getHiddenHistoryValues(orderData.userId, field)
-      if (hidden.includes(orderData[field])) {
-        setSettingValue(`hiddenHistory:${orderData.userId}:${field}`, JSON.stringify(hidden.filter(value => value !== orderData[field])))
+    let createdFolder
+    const create = db.transaction(() => {
+      const stmt = db.prepare(`
+        INSERT INTO Orders (userId, title, university, college, major, studentName, wechatName, orderCode, groupChatName, specialService, includesDesign, designType, designSubType, designStatus, orderType, formatMode, packageTier, hasOriginalText, receiver, handler, advisor, deadline, totalAmount, paidAmount, dispatchAmount, isDesignFinished, folderPath, graduationYear, createdAt, syncUuid)
+        VALUES (@userId, @title, @university, @college, @major, @studentName, @wechatName, @orderCode, @groupChatName, @specialService, @includesDesign, @designType, @designSubType, @designStatus, @orderType, @formatMode, @packageTier, @hasOriginalText, @receiver, @handler, @advisor, @deadline, @totalAmount, @paidAmount, @dispatchAmount, 0, @folderPath, @graduationYear, datetime('now'), @syncUuid)
+      `)
+      const now = new Date()
+      const defaultGradYear = now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear()
+      const orderData = {
+        designType: '', designSubType: '', designStatus: '',
+        orderType: 'thesis', formatMode: '', packageTier: '', hasOriginalText: 0, specialService: '',
+        dispatchAmount: 0, graduationYear: defaultGradYear, syncUuid: makeSyncId(),
+        ...data,
       }
+      orderData.packageTier = normalizePackageTier(orderData.packageTier)
+      if (isSelfHandlerValue(orderData.handler)) {
+        orderData.handler = '本人'
+        orderData.dispatchAmount = 0
+      }
+      const manualGroupChatName = String(orderData.groupChatName || '').trim()
+      orderData.orderCode = String(orderData.orderCode || '').trim()
+        || manualGroupChatName
+        || generateNextOrderCode(orderData.userId, orderData, now)
+      const duplicateOrder = db.prepare(`
+        SELECT id FROM Orders
+        WHERE userId = ? AND orderCode = ? COLLATE NOCASE
+      `).get(orderData.userId, orderData.orderCode)
+      if (duplicateOrder) {
+        throw new Error(`订单编号“${orderData.orderCode}”已存在，请检查群聊名称或使用其他编号。`)
+      }
+      orderData.groupChatName = manualGroupChatName || orderData.orderCode
+      const rootDirectory = getRootDirectory()
+      if (rootDirectory && !orderData.folderPath) {
+        if (!fs.statSync(rootDirectory, { throwIfNoEntry: false })?.isDirectory()) {
+          throw new Error('项目根目录不可用，请检查磁盘和目录设置。')
+        }
+        const folderPath = buildGraduationOrderFolderPath(rootDirectory, orderData)
+        if (!isPathWithin(rootDirectory, folderPath) || findFolderOwners(folderPath).length) {
+          throw new Error('项目文件夹路径冲突，请检查订单编号和目录。')
+        }
+        fs.mkdirSync(path.dirname(folderPath), { recursive: true })
+        try {
+          fs.mkdirSync(folderPath)
+        } catch (error) {
+          if (error.code === 'EEXIST') throw new Error('项目文件夹已经存在，请检查订单编号和目录。')
+          throw error
+        }
+        createdFolder = folderPath
+        createOrderFolderContents(folderPath, orderData)
+        orderData.folderPath = folderPath
+      }
+      const result = stmt.run(orderData)
+      for (const field of HISTORY_FIELDS) {
+        const hidden = getHiddenHistoryValues(orderData.userId, field)
+        if (hidden.includes(orderData[field])) {
+          setSettingValue(`hiddenHistory:${orderData.userId}:${field}`, JSON.stringify(hidden.filter(value => value !== orderData[field])))
+        }
+      }
+      const orderRow = getOrderById(Number(result.lastInsertRowid))
+      recordOrderSyncEvent('create', orderRow)
+      return result.lastInsertRowid
+    })
+    try {
+      return create()
+    } catch (error) {
+      if (createdFolder) fs.rmSync(createdFolder, { recursive: true, force: true })
+      throw error
     }
-    const orderRow = getOrderById(Number(result.lastInsertRowid))
-    recordOrderSyncEvent('create', orderRow)
-    return result.lastInsertRowid
   })
 
   ipcMain.handle('orders:update', (_, userId, id, data) => {
@@ -2372,7 +2479,11 @@ function registerIpcHandlers() {
       }
       return { success: true, folderRenamed: false, folderPath: oldFolderPath }
     }
-    if (fs.existsSync(newFolderPath)) {
+    const otherOwners = findFolderOwners(oldFolderPath, id)
+    if (otherOwners.length) {
+      return { success: false, error: 'SHARED_FOLDER', message: `项目文件夹也被订单 ${otherOwners.join('、')} 使用。` }
+    }
+    if (fs.existsSync(newFolderPath) || findFolderOwners(newFolderPath, id).length) {
       return { success: false, error: 'TARGET_EXISTS', oldFolderPath, newFolderPath }
     }
 
@@ -2446,6 +2557,9 @@ function registerIpcHandlers() {
       }
       if (!validation.ok) {
         folderDeleteResult.error = validation.error || '文件夹校验失败'
+      } else if (findFolderOwners(validation.path).length) {
+        folderDeleteResult.skipped = true
+        folderDeleteResult.error = '项目文件夹仍被其他订单使用，已保留'
       } else if (validation.missing) {
         folderDeleteResult.skipped = true
         folderDeleteResult.error = '文件夹不存在，已跳过删除'
@@ -2769,38 +2883,4 @@ function registerIpcHandlers() {
     return true
   })
 
-  ipcMain.handle('fs:generateOrderFolder', (_, { rootDirectory, university, major, studentName, title, includesDesign, orderType, graduationYear }) => {
-    const type = orderType || 'thesis'
-    const folderPath = buildGraduationOrderFolderPath(rootDirectory, {
-      university,
-      major,
-      studentName,
-      title,
-      orderType: type,
-      graduationYear,
-    })
-    try {
-      const fs = require('fs')
-      fs.mkdirSync(folderPath, { recursive: true })
-      if (['format', 'reduction', 'special'].includes(type)) {
-        fs.mkdirSync(path.join(folderPath, '客户源文件'), { recursive: true })
-        fs.mkdirSync(path.join(folderPath, '修改后文件'), { recursive: true })
-        fs.mkdirSync(path.join(folderPath, '客户要求'), { recursive: true })
-      } else if (type === 'translation') {
-        fs.mkdirSync(path.join(folderPath, '源文件'), { recursive: true })
-        fs.mkdirSync(path.join(folderPath, '交付文件'), { recursive: true })
-      } else {
-        fs.mkdirSync(path.join(folderPath, '论文文件', '外文翻译'), { recursive: true })
-        fs.mkdirSync(path.join(folderPath, '论文文件', '论文稿件'), { recursive: true })
-        fs.mkdirSync(path.join(folderPath, '论文文件', '论文稿件', '初稿'), { recursive: true })
-        fs.mkdirSync(path.join(folderPath, '客户提供的需求文件'), { recursive: true })
-        if (includesDesign || type === 'design') {
-          fs.mkdirSync(path.join(folderPath, '设计文件'), { recursive: true })
-        }
-      }
-      return { success: true, folderPath }
-    } catch (err) {
-      return { success: false, error: err.message }
-    }
-  })
 }

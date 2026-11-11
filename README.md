@@ -4,16 +4,25 @@
 
 ## 当前版本
 
-- 应用版本：`6.4.0`
+- 应用版本：`6.4.1`
 - 技术栈：`Vue 3`、`Vite`、`Electron`、`better-sqlite3`
 
 ## 开发命令
 
 ```bash
-npm install
+npm ci
 npm run dev
+npm run build:mac -- --arm64
 npm run build:win
 ```
+
+## 6.4.1 升级亮点
+
+- **macOS Apple Silicon**：提供 arm64 DMG，支持独立开发数据库。修复 Windows 历史订单目录和附件路径在 Mac 上的转换，支持直接选择 `shared-orders` 或其上一级，按依赖顺序回放同一时间的创建事件。
+- **订单文件夹**：新目录名包含订单编号，同类订单即使题目和姓名都为空也能使用独立目录。补题改名和删除时保护仍被其他订单引用的目录。
+- **历史目录修复**：在「设置 → 历史文件夹整理与拆分」预览并拆分共用的空目录。共享目录已有文件时会跳过，待确认资料归属。
+
+macOS 安装包见 [v6.4.1 GitHub Release](https://github.com/luckyxiaowang0117/bishejiedan-gradtrack/releases/tag/v6.4.1)。该构建使用临时签名，供本机安装测试。
 
 ## 6.4.0 升级亮点
 

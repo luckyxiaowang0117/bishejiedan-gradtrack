@@ -529,7 +529,7 @@ const folderPreview = computed(() => {
   const major = form.value.major || '专业名称'
   const title = form.value.title.trim() || '题目暂未确认'
   const student = form.value.studentName.trim()
-  const folderName = student ? `${year}-${student}-${title}` : `${year}-${title}`
+  const folderName = student ? `${prefix}-${student}-${title}` : `${prefix}-${title}`
   const subDir = typeSubDirMap[form.value.orderType] || '毕业设计'
   return `${year}届/${subDir}/${uni}/${major}专业/${folderName}`
 })
@@ -606,10 +606,10 @@ function sanitizeFolderPart(value, fallback = '') {
 }
 
 function getOrderFolderName(order) {
-  const year = Number(order.graduationYear) || getCurrentGraduationYear()
+  const prefix = sanitizeFolderPart(order.orderCode) || (Number(order.graduationYear) || getCurrentGraduationYear())
   const student = sanitizeFolderPart(order.studentName)
   const title = sanitizeFolderPart(order.title, '题目暂未确认') || '题目暂未确认'
-  return student ? `${year}-${student}-${title}` : `${year}-${title}`
+  return student ? `${prefix}-${student}-${title}` : `${prefix}-${title}`
 }
 
 function getOrderFolderPathPreview(currentPath, order) {
@@ -696,7 +696,7 @@ async function handleSave() {
       if (titleChanged && props.order.folderPath && oldTitle) {
         try {
           await ElMessageBox.confirm(
-            `题目已修改。\n\n当前文件夹：${props.order.folderPath}\n修改后文件夹：${getOrderFolderPathPreview(props.order.folderPath, payload)}\n\n是否同步修改文件夹名称？`,
+            `题目已修改。\n\n当前文件夹：${props.order.folderPath}\n修改后文件夹：${getOrderFolderPathPreview(props.order.folderPath, { ...props.order, ...payload })}\n\n是否同步修改文件夹名称？`,
             '题目与文件夹名称联动',
             {
               confirmButtonText: '修改文件夹并保存',
@@ -728,23 +728,7 @@ async function handleSave() {
         }
       }
     } else {
-      const newId = await api.createOrder({ ...payload, userId: currentUser.value.id, folderPath: '' })
-      const rootDir = await api.getSetting('rootDirectory')
-      if (rootDir) {
-        const r = await api.generateOrderFolder({
-          rootDirectory: rootDir,
-          university: payload.university,
-          major: payload.major,
-          studentName: payload.studentName,
-          title: payload.title,
-          includesDesign: payload.includesDesign,
-          orderType: payload.orderType,
-          graduationYear: payload.graduationYear,
-        })
-        if (r.success && r.folderPath) {
-          await api.updateOrder(currentUser.value.id, Number(newId), { folderPath: r.folderPath })
-        }
-      }
+      await api.createOrder({ ...payload, userId: currentUser.value.id, folderPath: '' })
     }
     ElMessage.success(isEditing.value ? '已保存' : '项目已创建')
     closeDialog()

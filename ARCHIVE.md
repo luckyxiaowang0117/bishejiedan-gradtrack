@@ -30,6 +30,13 @@
 | 6.2.0 | `接单管理助手 Setup 6.2.0.exe` | 2026-10-12 |
 | 6.3.0 | `接单管理助手 Setup 6.3.0.exe` | 2026-10-12 |
 | 6.4.0 | `接单管理助手 Setup 6.4.0.exe` | 2026-10-12 |
+| 6.4.1 | `接单管理助手-6.4.1-arm64.dmg` | 2026-11-11 |
+
+## 6.4.1 更新说明
+
+- macOS arm64 安装包支持 Apple Silicon，验证了隔离数据库下的 Windows 历史事件恢复、附件路径转换和重启读库。
+- 新建订单按编号生成独立目录。改名和删除保护仍有其他订单引用的目录，设置页支持预览和拆分共享空目录。
+- DMG 通过 [GitHub Releases](https://github.com/luckyxiaowang0117/bishejiedan-gradtrack/releases/tag/v6.4.1) 归档。
 
 ## 6.4.0 更新说明
 

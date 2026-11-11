@@ -281,8 +281,8 @@
         <div class="section-header">
           <el-icon :size="18" color="#7c3aed"><FolderOpened /></el-icon>
           <div>
-            <div class="section-title">历史文件夹按毕业届整理</div>
-            <div class="section-desc">将旧结构项目复制到“毕业届/业务类型/学校/专业”目录，并同步更新数据库路径</div>
+            <div class="section-title">历史文件夹整理与拆分</div>
+            <div class="section-desc">按毕业届整理旧项目，或将共用空目录的订单拆分到独立目录</div>
           </div>
         </div>
         <div class="migration-note">
@@ -381,7 +381,7 @@
 
       <div v-if="(folderMigrationPreview?.items || []).length > 0" class="folder-migration-list">
         <div v-for="item in folderMigrationPreview.items" :key="item.orderId" class="folder-migration-item">
-          <div class="folder-migration-title">{{ item.title }} <span>{{ item.graduationYear }}届</span></div>
+          <div class="folder-migration-title">{{ item.orderCode }} {{ item.title }} <span>{{ item.graduationYear }}届</span></div>
           <div class="path-line">
             <span>旧</span>
             <code>{{ item.oldPath }}</code>
@@ -398,7 +398,7 @@
         <el-collapse-item :title="`查看跳过项目（${folderMigrationPreview.skipped.length}）`" name="skipped">
           <div class="skipped-list">
             <div v-for="item in folderMigrationPreview.skipped" :key="`${item.orderId}-${item.reason}`" class="skipped-item">
-              <div class="skipped-title">{{ item.title }}</div>
+              <div class="skipped-title">{{ item.orderCode }} {{ item.title }}</div>
               <div class="skipped-reason">{{ getFolderMigrationReason(item.reason) }}<template v-if="item.detail">：{{ item.detail }}</template></div>
               <div v-if="item.oldPath" class="skipped-path">{{ item.oldPath }}</div>
             </div>
@@ -507,6 +507,7 @@ const folderMigrationReasonMap = {
   NO_GRADUATION_YEAR: '缺少毕业届',
   SOURCE_NOT_FOUND: '原文件夹不存在',
   OUTSIDE_ROOT: '不在当前根目录下',
+  SHARED_FOLDER_HAS_FILES: '共用目录包含文件',
   ALREADY_MIGRATED: '已在毕业届目录中',
   SAME_PATH: '新旧路径一致',
   TARGET_EXISTS: '目标文件夹已存在',

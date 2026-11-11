@@ -71,7 +71,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // File System
   openFolder: (folderPath) => ipcRenderer.invoke('fs:openFolder', folderPath),
   createFolder: (folderPath) => ipcRenderer.invoke('fs:createFolder', folderPath),
-  generateOrderFolder: (params) => ipcRenderer.invoke('fs:generateOrderFolder', params),
   listFolderContents: (folderPath) => ipcRenderer.invoke('fs:listFolderContents', folderPath),
   copyFilesToFolder: (filePaths, targetFolder) => ipcRenderer.invoke('fs:copyFilesToFolder', filePaths, targetFolder),
   openFileInSystem: (filePath) => ipcRenderer.invoke('fs:openFileInSystem', filePath),
