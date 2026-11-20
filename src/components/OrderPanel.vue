@@ -7,7 +7,7 @@
         <span v-if="order.orderCode" class="order-code-badge">{{ order.orderCode }}</span>
         <span
           class="order-type-badge"
-          :style="{ color: orderTypeMeta.color, background: orderTypeMeta.color + '14' }"
+          :style="{ color: orderTypeMeta.color, background: `color-mix(in srgb, ${orderTypeMeta.color} 8%, var(--gt-surface))` }"
         >{{ orderTypeMeta.label }}</span>
         <div class="header-divider" />
         <span class="created-date">创建于 {{ order.createdAt?.split('T')[0] || '—' }}</span>
@@ -28,10 +28,10 @@
             <div class="title-area">
               <span
                 class="order-type-tag"
-                :style="{ color: orderTypeMeta.color, background: orderTypeMeta.color + '14', borderColor: orderTypeMeta.color + '30' }"
+                :style="{ color: orderTypeMeta.color, background: `color-mix(in srgb, ${orderTypeMeta.color} 8%, var(--gt-surface))`, borderColor: `color-mix(in srgb, ${orderTypeMeta.color} 24%, var(--gt-border))` }"
               >{{ orderTypeMeta.label }}</span>
               <h2 class="project-title">{{ order.title || '待客户确认题目' }}</h2>
-              <el-tag v-if="!String(order.title || '').trim()" type="warning" effect="plain" size="small">待补充题目</el-tag>
+              <el-tag v-if="!String(order.title || '').trim()" class="detail-missing-title" type="warning" effect="plain" size="small">待补充题目</el-tag>
             </div>
 
             <!-- Design status badge -->
@@ -42,18 +42,19 @@
               </div>
               <div class="design-divider" />
               <el-dropdown trigger="click" @command="handleDesignStatusChange">
-                <div class="design-status-btn" :class="'status-' + designStatusColor">
+                <div class="design-status-btn" :class="designStatusClass(order.designStatus)">
                   <span class="design-status-dot" />
                   <span>{{ order.designStatus || '未设置' }}</span>
                   <el-icon :size="12"><ArrowDown /></el-icon>
                 </div>
                 <template #dropdown>
-                  <el-dropdown-menu>
+                  <el-dropdown-menu class="design-status-menu">
                     <el-dropdown-item
                       v-for="s in availableDesignStatuses"
                       :key="s"
                       :command="s"
-                      :class="{ 'is-active': s === order.designStatus }"
+                      :class="[designStatusClass(s), { 'is-active': s === order.designStatus }]"
+                      :aria-current="s === order.designStatus ? 'true' : undefined"
                     >{{ s }}</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -69,7 +70,7 @@
 
           <!-- Breadcrumb: school/college/major -->
           <div v-if="order.university" class="school-breadcrumb">
-            <el-icon :size="16" color="#6366f1"><OfficeBuilding /></el-icon>
+            <el-icon :size="16" color="var(--gt-text-violet)"><OfficeBuilding /></el-icon>
             <span class="crumb-bold">{{ order.university || '未填写学校' }}</span>
             <span class="crumb-sep">/</span>
             <span>{{ order.college || '未填写学院' }}</span>
@@ -210,7 +211,7 @@
                   </div>
                 </div>
                 <template v-if="balanceDue > 0">
-                  <el-progress :percentage="paymentPercent" :stroke-width="5" :show-text="false" color="#6366f1" class="fin-progress" />
+                  <el-progress :percentage="paymentPercent" :stroke-width="5" :show-text="false" color="var(--gt-text-violet)" class="fin-progress" />
                 </template>
                 <div v-else-if="(order.totalAmount || 0) > 0 && balanceDue <= 0" class="fin-status-ok">
                   🎉 已全部收款 ✨
@@ -266,27 +267,71 @@
           </template>
         </div>
 
-        <!-- Module 2: Project Folders (thesis & format) -->
-        <ProjectFolders
-          v-if="order.folderPath"
-          ref="projectFoldersRef"
-          :folder-path="order.folderPath"
-          :includes-design="!!order.includesDesign"
-          :order-type="order.orderType || 'thesis'"
-        />
+        <div class="workspace-tabs" role="group" aria-label="订单工作区">
+          <button
+            type="button"
+            class="workspace-tab-btn"
+            :class="{ active: activeTab === 'files' }"
+            :aria-pressed="activeTab === 'files'"
+            @click="activeTab = 'files'"
+          >
+            <el-icon><Folder /></el-icon>
+            <span>项目文件区</span>
+          </button>
+          <button
+            v-if="order.orderType !== 'translation'"
+            type="button"
+            class="workspace-tab-btn"
+            :class="{ active: activeTab === 'revisions' }"
+            :aria-pressed="activeTab === 'revisions'"
+            @click="openRevisions"
+          >
+            <el-icon><Connection /></el-icon>
+            <span>修改意见与迭代</span>
+            <span v-if="revisions.length > 0" class="tab-badge">{{ revisions.length }}</span>
+          </button>
+        </div>
 
-        <!-- Module 3: Draft / Delivery Upload -->
-        <DraftUpload
-          v-if="order.folderPath"
-          :folder-path="order.folderPath"
-          :order-id="order.id"
-          :order-type="order.orderType || 'thesis'"
-          @draft-uploaded="emit('updated')"
-        />
+        <section v-show="activeTab === 'files'" aria-label="项目文件区">
+          <template v-if="order.folderPath">
+            <ProjectFolders
+              ref="projectFoldersRef"
+              :folder-path="order.folderPath"
+              :includes-design="!!order.includesDesign"
+              :order-type="order.orderType || 'thesis'"
+            />
+            <DraftUpload
+              :folder-path="order.folderPath"
+              :order-id="order.id"
+              :order-type="order.orderType || 'thesis'"
+              @draft-uploaded="emit('updated')"
+            />
+          </template>
+          <el-alert
+            v-else
+            title="此订单未关联项目文件夹"
+            description="关联项目文件夹后，此处会显示项目资料及交付文件。"
+            type="info"
+            show-icon
+            :closable="false"
+          />
 
-        <!-- Module 4: Revision Tracker (thesis & format) -->
+          <div v-if="order.orderType === 'translation'" class="translation-status-card">
+            <h3 class="section-title">
+              <el-icon :size="18" color="var(--gt-text-warning)"><Document /></el-icon>
+              翻译任务状态
+            </h3>
+            <div class="translation-info">
+              <el-tag :type="order.hasOriginalText ? 'success' : 'warning'" size="default" effect="plain">
+                {{ order.hasOriginalText ? '已有原文' : '暂无原文' }}
+              </el-tag>
+            </div>
+          </div>
+        </section>
+
         <RevisionTracker
-          v-if="order.orderType !== 'translation'"
+          v-if="revisionsOpened && order.orderType !== 'translation'"
+          v-show="activeTab === 'revisions'"
           :order-id="order.id"
           :revisions="revisions"
           :project-folders-ref="projectFoldersRef"
@@ -294,28 +339,71 @@
           @changed="onRevisionsChanged"
         />
 
-        <!-- Translation: simple status area -->
-        <div v-if="order.orderType === 'translation'" class="translation-status-card">
-          <h3 class="section-title">
-            <el-icon :size="18" color="#f59e0b"><Document /></el-icon>
-            翻译任务状态
-          </h3>
-          <div class="translation-info">
-            <el-tag :type="order.hasOriginalText ? 'success' : 'warning'" size="default" effect="plain">
-              {{ order.hasOriginalText ? '已有原文' : '暂无原文' }}
-            </el-tag>
-          </div>
-        </div>
-
         <div style="height: 40px" />
       </div>
     </div>
+
+    <el-dialog
+      v-model="deleteDialogVisible"
+      class="delete-order-dialog"
+      :title="deleteStep === 'scope' ? '删除订单' : '验证删除订单'"
+      width="min(500px, calc(100vw - 32px))"
+      align-center
+      append-to-body
+      :show-close="!deleting"
+      :close-on-click-modal="false"
+      :close-on-press-escape="!deleting"
+      @closed="deletePassword = ''"
+    >
+      <div class="delete-order-summary">
+        <span class="delete-order-code">{{ order.orderCode || '#' + order.id }}</span>
+        <strong>{{ order.title || '待客户确认题目' }}</strong>
+        <p>订单、修改轮次和反馈记录将被删除。</p>
+      </div>
+
+      <el-checkbox v-if="order.folderPath && deleteStep === 'scope'" v-model="deleteFolder">
+        同时删除项目文件夹
+      </el-checkbox>
+      <div v-if="deleteFolder && order.folderPath" class="delete-folder-warning">
+        <strong>此文件夹及其中的资料也将被删除</strong>
+        <p>{{ order.folderPath }}</p>
+      </div>
+      <p v-else-if="order.folderPath" class="delete-folder-retained">项目文件夹会保留。</p>
+
+      <form v-if="deleteStep === 'verify'" class="delete-password-form" @submit.prevent="confirmDelete">
+        <label for="delete-order-password">登录密码</label>
+        <el-input
+          id="delete-order-password"
+          ref="deletePasswordInput"
+          v-model="deletePassword"
+          type="password"
+          autocomplete="current-password"
+          placeholder="输入登录密码"
+          :disabled="deleting"
+          :aria-invalid="!!deleteError"
+          @input="deleteError = ''"
+        />
+        <p v-if="deleteError" class="delete-error" role="alert">{{ deleteError }}</p>
+      </form>
+
+      <template #footer>
+        <el-button :disabled="deleting" @click="deleteDialogVisible = false">取消</el-button>
+        <el-button v-if="deleteStep === 'scope'" type="danger" @click="requestDeletePassword">
+          继续验证
+        </el-button>
+        <el-button v-else type="danger" :loading="deleting" @click="confirmDelete">
+          {{ deleteFolder ? '删除订单和文件夹' : '仅删除订单' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { orderTypeMeta as orderTypeMap } from '../orderTypeMeta.js'
+import { designStatusClass } from '../designStatus.js'
 import RevisionTracker from './RevisionTracker.vue'
 import ProjectFolders from './ProjectFolders.vue'
 import DraftUpload from './DraftUpload.vue'
@@ -327,8 +415,22 @@ const props = defineProps({
 })
 const projectFoldersRef = ref(null)
 const infoExpanded = ref(false)
+const activeTab = ref('files')
+const revisionsOpened = ref(false)
+const deleteDialogVisible = ref(false)
+const deleteStep = ref('scope')
+const deleteFolder = ref(false)
+const deletePassword = ref('')
+const deletePasswordInput = ref(null)
+const deleteError = ref('')
+const deleting = ref(false)
 const emit = defineEmits(['updated', 'edit', 'deleted'])
 const api = window.electronAPI
+
+function openRevisions() {
+  revisionsOpened.value = true
+  activeTab.value = 'revisions'
+}
 
 watch(
   () => props.order?.id,
@@ -340,14 +442,6 @@ watch(
   (value) => { infoExpanded.value = !!value }
 )
 
-const orderTypeMap = {
-  thesis: { label: '毕设论文', color: '#6366f1' },
-  format: { label: '格式修改', color: '#0ea5e9' },
-  translation: { label: '外文翻译', color: '#f59e0b' },
-  design: { label: '设计定制', color: '#8b5cf6' },
-  reduction: { label: '论文降重', color: '#10b981' },
-  special: { label: '特殊订单', color: '#ef4444' },
-}
 const orderTypeMeta = computed(() => orderTypeMap[props.order.orderType] || orderTypeMap.thesis)
 
 const packageMeta = computed(() => {
@@ -385,14 +479,6 @@ const availableDesignStatuses = computed(() => {
     return sub?.statuses || []
   }
   return def.statuses || []
-})
-
-const designStatusColor = computed(() => {
-  const s = props.order.designStatus
-  if (!s) return 'info'
-  if (['已完成', '已优化', '已购买'].includes(s)) return 'success'
-  if (['客户提供'].includes(s)) return ''
-  return 'warning'
 })
 
 async function handleDesignStatusChange(status) {
@@ -566,92 +652,76 @@ async function handleSettleBalance() {
   } catch {}
 }
 
-async function handleDelete() {
+function handleDelete() {
+  deleteStep.value = 'scope'
+  deleteFolder.value = false
+  deletePassword.value = ''
+  deleteError.value = ''
+  deleteDialogVisible.value = true
+}
+
+async function requestDeletePassword() {
+  deleteStep.value = 'verify'
+  await nextTick()
+  deletePasswordInput.value?.focus()
+}
+
+async function confirmDelete() {
+  if (deleting.value) return
+  if (!deletePassword.value) {
+    deleteError.value = '请输入登录密码。'
+    deletePasswordInput.value?.focus()
+    return
+  }
+
+  const userId = props.currentUser?.id
+  if (!userId) {
+    deleteError.value = '无法验证身份，请重新登录。'
+    return
+  }
+
+  const orderId = props.order.id
+  const folderPath = props.order.folderPath
+  const deleteProjectFolder = deleteFolder.value && !!folderPath
+  deleting.value = true
+  deleteError.value = ''
   try {
-    let deleteFolder = false
-    const folderPath = props.order.folderPath || ''
-    if (folderPath) {
-      await ElMessageBox.confirm(
-        `确定删除「${props.order.title || '待客户确认题目'}」？\n\n检测到本地项目文件夹：\n${folderPath}\n\n选择“删除订单和文件夹”会同时移除本地资料；选择“仅删除订单”会保留文件夹。`,
-        '删除项目',
-        {
-          type: 'warning',
-          distinguishCancelAndClose: true,
-          confirmButtonText: '删除订单和文件夹',
-          cancelButtonText: '仅删除订单',
-          closeOnClickModal: false,
-        }
-      )
-      deleteFolder = true
-    } else {
-      await ElMessageBox.confirm(
-        `确定删除「${props.order.title || '待客户确认题目'}」？此操作会删除软件中的订单、修改记录和反馈项。`,
-        '删除项目',
-        {
-          type: 'warning',
-          confirmButtonText: '确定删除',
-          cancelButtonText: '取消',
-        }
-      )
-    }
-    const { value: pwd } = await ElMessageBox.prompt('请输入您的登录密码以确认删除', '身份验证', {
-      inputType: 'password',
-      inputPlaceholder: '输入密码',
-      confirmButtonText: '确认删除',
-      cancelButtonText: '取消',
-    })
-    if (!props.currentUser) {
-      ElMessage.error('无法验证身份，请重新登录')
+    const verified = await api.verifyPassword(userId, deletePassword.value)
+    if (!verified) {
+      deleteError.value = '密码错误，请重新输入。'
       return
     }
-    const ok = await api.verifyPassword(props.currentUser.id, pwd)
-    if (!ok) {
-      ElMessage.error('密码错误，删除已取消')
+    if (deleteProjectFolder && folderPath !== props.order.folderPath) {
+      deleteStep.value = 'scope'
+      deleteFolder.value = false
+      ElMessage.warning('项目文件夹已变更，请重新确认删除范围。')
       return
     }
-    const result = await api.deleteOrder(props.currentUser.id, props.order.id, { deleteFolder })
+
+    const result = await api.deleteOrder(userId, orderId, { deleteFolder: deleteProjectFolder })
     if (!result?.success) {
-      ElMessage.error(result?.error === 'ORDER_NOT_FOUND' ? '项目不存在或已被删除' : (result?.error || '删除失败'))
+      deleteError.value = result?.error === 'ORDER_NOT_FOUND'
+        ? '项目不存在或已被删除。'
+        : (result?.error || '删除失败，请重试。')
       return
     }
+    deleteDialogVisible.value = false
     emit('deleted')
-    if (deleteFolder) {
-      if (result.folder?.deleted) {
-        ElMessage.success('项目和本地文件夹已删除')
-      } else if (result.folder?.error) {
-        ElMessage.warning(`项目已删除，但文件夹未删除：${result.folder.error}`)
-      } else {
-        ElMessage.success('项目已删除')
-      }
+    if (result.folder?.deleted) {
+      ElMessage.success('订单和本地文件夹已删除')
+    } else if (deleteProjectFolder && result.folder?.error) {
+      ElMessage.warning(`订单已删除，文件夹未删除：${result.folder.error}`)
     } else {
-      ElMessage.success(folderPath ? '项目已删除，本地文件夹已保留' : '项目已删除')
+      ElMessage.success(folderPath ? '订单已删除，本地文件夹已保留' : '订单已删除')
     }
-  } catch (err) {
-    if (err === 'cancel' && props.order.folderPath) {
-      try {
-        const { value: pwd } = await ElMessageBox.prompt('请输入您的登录密码以确认删除', '身份验证', {
-          inputType: 'password',
-          inputPlaceholder: '输入密码',
-          confirmButtonText: '确认删除',
-          cancelButtonText: '取消',
-        })
-        if (!props.currentUser) {
-          ElMessage.error('无法验证身份，请重新登录')
-          return
-        }
-        const ok = await api.verifyPassword(props.currentUser.id, pwd)
-        if (!ok) {
-          ElMessage.error('密码错误，删除已取消')
-          return
-        }
-        const result = await api.deleteOrder(props.currentUser.id, props.order.id, { deleteFolder: false })
-        if (!result?.success) {
-          ElMessage.error(result?.error === 'ORDER_NOT_FOUND' ? '项目不存在或已被删除' : (result?.error || '删除失败'))
-          return
-        }
-        emit('deleted')
-        ElMessage.success('项目已删除，本地文件夹已保留')
-      } catch {}
+  } catch (error) {
+    deleteError.value = error?.message || '删除失败，请重试。'
+  } finally {
+    deleting.value = false
+    deletePassword.value = ''
+    if (deleteDialogVisible.value && deleteStep.value === 'verify') {
+      await nextTick()
+      deletePasswordInput.value?.focus()
     }
   }
 }
@@ -660,6 +730,68 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 </script>
 
 <style scoped>
+:global(.delete-order-dialog .el-dialog__title) {
+  font-weight: 600;
+}
+
+.delete-order-summary {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+}
+
+.delete-order-summary p,
+.delete-folder-retained,
+.delete-folder-warning p {
+  font-weight: 500;
+}
+
+.delete-order-code {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gt-text-violet);
+}
+
+.delete-order-summary strong {
+  font-size: 15px;
+  color: var(--gt-text-main);
+}
+
+.delete-folder-retained {
+  color: var(--gt-text-muted);
+}
+
+.delete-folder-warning {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--gt-danger-border);
+  border-radius: 8px;
+  background: var(--gt-danger-surface);
+  color: light-dark(#991b1b, #fda4af);
+}
+
+.delete-folder-warning p {
+  max-height: 96px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.delete-password-form {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.delete-password-form label {
+  font-weight: 600;
+}
+
+.delete-error {
+  color: var(--gt-text-danger);
+}
+
 .panel-wrapper {
   flex: 1;
   display: flex;
@@ -670,8 +802,8 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 /* ─── Header ─── */
 .panel-header {
   height: var(--gt-topbar-height);
-  background: #fff;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--gt-surface);
+  border-bottom: 1px solid var(--gt-border);
   padding: 0 var(--gt-page-pad);
   display: flex;
   align-items: center;
@@ -686,10 +818,10 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 }
 .id-badge {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   padding: 4px 10px;
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--gt-surface-raised);
+  color: var(--gt-text-main);
   border-radius: 6px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -698,30 +830,31 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   font-size: 12px;
   font-weight: 700;
   padding: 4px 10px;
-  background: #eef2ff;
-  color: #4338ca;
-  border: 1px solid #c7d2fe;
+  background: var(--gt-accent-surface);
+  color: var(--gt-text-violet);
+  border: 1px solid var(--gt-accent-border);
   border-radius: 6px;
   letter-spacing: 0;
 }
 .header-divider {
   width: 1px;
   height: 16px;
-  background: #e2e8f0;
+  background: light-dark(#cbd5e1, var(--gt-surface-raised));
 }
 .created-date {
   font-size: var(--gt-text-sm);
-  color: #64748b;
+  color: var(--gt-text-main);
+  font-weight: 600;
 }
 .folder-btn {
-  background: #1e293b !important;
+  background: light-dark(#1e293b, #282828) !important;
   color: #fff !important;
   border: none !important;
   border-radius: 8px !important;
   font-weight: 500 !important;
 }
 .folder-btn:hover {
-  background: #334155 !important;
+  background: light-dark(#334155, #393939) !important;
 }
 
 /* ─── Content ─── */
@@ -737,9 +870,9 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 
 /* ─── Info Card ─── */
 .info-card {
-  background: #fff;
+  background: var(--gt-surface);
   border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--gt-border);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   padding: var(--gt-card-pad);
   margin-bottom: var(--gt-card-gap);
@@ -767,11 +900,11 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 .package-summary-icon,
 .package-summary-code { font-weight: 700; }
 .package-summary.package-budget,
-.package-detail-value.package-budget { color: #047857; background: #ecfdf5; border-color: #a7f3d0; }
+.package-detail-value.package-budget { color: var(--gt-text-success); background: var(--gt-success-surface); border-color: var(--gt-success-border); }
 .package-summary.package-carefree,
-.package-detail-value.package-carefree { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
+.package-detail-value.package-carefree { color: var(--gt-text-accent); background: light-dark(#eff6ff, #24364e); border-color: light-dark(#bfdbfe, #50678e); }
 .package-summary.package-vip,
-.package-detail-value.package-vip { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+.package-detail-value.package-vip { color: light-dark(#b45309, #fcd58a); background: var(--gt-warning-surface); border-color: var(--gt-warning-border); }
 
 .package-detail-value {
   display: inline-flex;
@@ -801,7 +934,7 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 .project-title {
   font-size: var(--gt-title-xl);
   font-weight: 700;
-  color: #1e293b;
+  color: var(--gt-text-body);
   line-height: 1.3;
   margin: 0;
 }
@@ -812,8 +945,8 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--gt-surface-subtle);
+  border: 1px solid var(--gt-border);
   border-radius: 10px;
   flex-shrink: 0;
 }
@@ -824,16 +957,16 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 }
 .design-type-label {
   font-size: 13px;
-  color: #334155;
+  color: light-dark(#334155, var(--gt-text-body));
   font-weight: 600;
   white-space: nowrap;
 }
 .design-sub-label {
   font-size: 12px;
-  color: #6366f1;
+  color: var(--gt-text-violet);
   font-weight: 500;
   white-space: nowrap;
-  background: #eef2ff;
+  background: var(--gt-accent-surface);
   padding: 1px 8px;
   border-radius: 4px;
   display: inline-block;
@@ -842,50 +975,38 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 .design-divider {
   width: 1px;
   height: 28px;
-  background: #e2e8f0;
+  background: var(--gt-surface-raised);
   flex-shrink: 0;
 }
+.detail-missing-title.el-tag {
+  --el-tag-text-color: var(--gt-status-pending-text);
+  font-weight: 600;
+}
+
 .design-status-btn {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
   border-radius: 8px;
+  background: var(--gt-design-status-surface);
+  color: var(--gt-design-status-text);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
   white-space: nowrap;
+}
+.design-status-btn:hover {
+  background: color-mix(in srgb, var(--gt-design-status-surface) 94%, var(--gt-design-status-text));
 }
 .design-status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  background: currentColor;
   flex-shrink: 0;
 }
-.design-status-btn.status-success {
-  background: #ecfdf5;
-  color: #059669;
-}
-.design-status-btn.status-success .design-status-dot { background: #10b981; }
-.design-status-btn.status-success:hover { background: #d1fae5; }
-
-.design-status-btn.status-warning {
-  background: #fffbeb;
-  color: #b45309;
-}
-.design-status-btn.status-warning .design-status-dot { background: #f59e0b; }
-.design-status-btn.status-warning:hover { background: #fef3c7; }
-
-.design-status-btn.status-info,
-.design-status-btn.status- {
-  background: #f1f5f9;
-  color: #475569;
-}
-.design-status-btn.status-info .design-status-dot,
-.design-status-btn.status- .design-status-dot { background: #94a3b8; }
-.design-status-btn.status-info:hover,
-.design-status-btn.status-:hover { background: #e2e8f0; }
 
 /* Breadcrumb */
 .school-breadcrumb {
@@ -893,15 +1014,16 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
+  background: var(--gt-surface-subtle);
+  border: 1px solid var(--gt-border-strong);
   border-radius: 8px;
   font-size: var(--gt-text-sm);
-  color: #475569;
+  color: var(--gt-text-main);
+  font-weight: 600;
   margin-bottom: calc(var(--gt-card-gap) - 4px);
 }
-.crumb-bold { font-weight: 500; }
-.crumb-sep { color: #cbd5e1; }
+.crumb-bold { font-weight: 700; color: var(--gt-text-heading); }
+.crumb-sep { color: light-dark(#64748b, var(--gt-text-muted)); }
 
 /* Info grid */
 .info-grid {
@@ -914,12 +1036,13 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 .info-grid-secondary {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--gt-border-strong);
 }
 
 .text-muted {
-  color: #94a3b8;
+  color: var(--gt-text-main);
   font-size: 12px;
+  font-weight: 600;
 }
 
 .info-cell {
@@ -946,15 +1069,16 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 .info-cell:nth-child(7)::before { background: #fb7185; }
 
 .cell-label {
-  font-size: 10px;
-  color: #b0b8c9;
+  font-size: 12px;
+  color: var(--gt-text-main);
+  font-weight: 700;
   white-space: nowrap;
   letter-spacing: 0.3px;
 }
 .cell-value {
   font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
+  font-weight: 700;
+  color: var(--gt-text-heading);
   white-space: nowrap;
 }
 .cell-value.copyable {
@@ -968,19 +1092,19 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   transition: background 0.15s;
 }
 .cell-value.copyable:hover {
-  background: #eef2ff;
+  background: var(--gt-accent-surface);
 }
 .copy-icon {
   opacity: 0;
-  color: #94a3b8;
+  color: light-dark(#64748b, var(--gt-text-muted));
   transition: opacity 0.15s, color 0.15s;
 }
 .cell-value.copyable:hover .copy-icon {
   opacity: 1;
-  color: #6366f1;
+  color: light-dark(#4f46e5, #c7d2fe);
 }
-.text-urgent { color: #e11d48; }
-.urgent-mark { color: #e11d48; }
+.text-urgent { color: var(--gt-text-danger); }
+.urgent-mark { color: var(--gt-text-danger); }
 
 /* Collapse Toggle */
 .collapse-divider {
@@ -992,7 +1116,7 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 .collapse-divider::after {
   content: '';
   flex: 1;
-  border-top: 1px dashed #e2e8f0;
+  border-top: 1px dashed var(--gt-border-strong);
 }
 .collapse-toggle {
   display: inline-flex;
@@ -1000,11 +1124,11 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   gap: 4px;
   padding: 3px 14px;
   margin: 0 12px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #94a3b8;
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gt-text-main);
+  background: var(--gt-surface);
+  border: 1px solid var(--gt-border-strong);
   border-radius: 20px;
   cursor: pointer;
   transition: all 0.15s;
@@ -1012,8 +1136,8 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 .collapse-toggle:hover {
-  color: #6366f1;
-  border-color: #c7d2fe;
+  color: var(--gt-text-violet);
+  border-color: var(--gt-accent-border);
   box-shadow: 0 2px 6px rgba(99,102,241,0.1);
 }
 
@@ -1028,15 +1152,15 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 .fin-card {
   border-radius: 12px;
   padding: 14px 18px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--gt-border);
 }
 .fin-card-income {
-  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
-  border-color: #e0e7ff;
+  background: linear-gradient(135deg, var(--gt-surface-subtle) 0%, var(--gt-accent-surface) 100%);
+  border-color: var(--gt-accent-border);
 }
 .fin-card-settle {
-  background: linear-gradient(135deg, #f8fafc 0%, #ecfdf5 100%);
-  border-color: #d1fae5;
+  background: linear-gradient(135deg, var(--gt-surface-subtle) 0%, light-dark(var(--gt-success-surface), var(--gt-surface-muted)) 100%);
+  border-color: light-dark(var(--gt-success-border), var(--gt-border));
 }
 
 .fin-card-header {
@@ -1055,17 +1179,17 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   flex-shrink: 0;
 }
 .fin-icon-income {
-  background: #e0e7ff;
-  color: #4f46e5;
+  background: var(--gt-accent-surface-strong);
+  color: light-dark(#4f46e5, #c7d2fe);
 }
 .fin-icon-settle {
-  background: #d1fae5;
-  color: #059669;
+  background: light-dark(#d1fae5, #1d4338);
+  color: var(--gt-text-success);
 }
 .fin-card-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #475569;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--gt-text-main);
 }
 
 .fin-grid {
@@ -1082,21 +1206,67 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   align-items: center;
   gap: 3px;
   padding: 8px 4px;
-  background: rgba(255, 255, 255, 0.7);
+  background: color-mix(in srgb, var(--gt-surface) 70%, transparent);
   border-radius: 8px;
 }
 .fin-num {
   font-size: 17px;
-  font-weight: 700;
-  color: #1e293b;
+  font-weight: 800;
+  color: var(--gt-text-heading);
   letter-spacing: -0.3px;
 }
-.fin-num-green { color: #059669; }
-.fin-num-red { color: #e11d48; font-weight: 700; }
+.fin-num-green { color: var(--gt-text-success); }
+.fin-num-red { color: var(--gt-text-danger); font-weight: 800; }
 .fin-lbl {
-  font-size: 10px;
-  color: #94a3b8;
-  font-weight: 500;
+  font-size: 12px;
+  color: var(--gt-text-main);
+  font-weight: 700;
+}
+
+.workspace-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--gt-card-gap);
+  border-bottom: 1px solid var(--gt-border-strong);
+  padding-bottom: 10px;
+}
+
+.workspace-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--gt-text-main);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.workspace-tab-btn:hover {
+  background: var(--gt-surface-muted);
+  color: var(--gt-text-heading);
+}
+
+.workspace-tab-btn.active {
+  background: var(--gt-surface);
+  border-color: var(--gt-border-strong);
+  color: light-dark(#4f46e5, #c7d2fe);
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05);
+}
+
+.tab-badge {
+  background: var(--gt-accent-surface);
+  color: light-dark(#4f46e5, #c7d2fe);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-weight: 600;
 }
 
 .fin-progress {
@@ -1107,11 +1277,11 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   text-align: center;
   font-size: 13px;
   font-weight: 600;
-  color: #059669;
+  color: var(--gt-text-success);
   padding: 6px;
-  background: linear-gradient(135deg, #ecfdf5, #f0fdf4, #fffbeb);
+  background: linear-gradient(135deg, var(--gt-success-surface), light-dark(#f0fdf4, #17352e), var(--gt-warning-surface));
   border-radius: 8px;
-  border: 1px solid #d1fae5;
+  border: 1px solid var(--gt-success-border);
 }
 
 .fin-actions {
@@ -1119,7 +1289,7 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   gap: 6px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px dashed #d1fae5;
+  border-top: 1px dashed var(--gt-success-border);
 }
 
 .refund-tag {
@@ -1128,11 +1298,11 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   gap: 3px;
   font-size: 11px;
   font-weight: 500;
-  color: #d97706;
-  background: #fffbeb;
+  color: var(--gt-text-warning);
+  background: var(--gt-warning-surface);
   padding: 2px 8px;
   border-radius: 4px;
-  border: 1px solid #fde68a;
+  border: 1px solid var(--gt-warning-border);
 }
 .settle-ok-tag {
   display: inline-flex;
@@ -1140,11 +1310,11 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
   gap: 3px;
   font-size: 11px;
   font-weight: 600;
-  color: #059669;
-  background: #ecfdf5;
+  color: var(--gt-text-success);
+  background: var(--gt-success-surface);
   padding: 2px 8px;
   border-radius: 4px;
-  border: 1px solid #a7f3d0;
+  border: 1px solid var(--gt-success-border);
 }
 .fin-link-btn {
   margin-left: auto;
@@ -1154,7 +1324,7 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 .info-actions {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--gt-border);
   display: flex;
   gap: 8px;
 }
@@ -1167,9 +1337,9 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 }
 
 .translation-status-card {
-  background: #fff;
+  background: var(--gt-surface);
   border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--gt-border);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   padding: var(--gt-card-pad);
   margin-bottom: var(--gt-card-gap);
@@ -1177,7 +1347,7 @@ watch(() => props.order.id, loadRevisions, { immediate: true })
 .section-title {
   font-size: var(--gt-title-md);
   font-weight: 700;
-  color: #1e293b;
+  color: var(--gt-text-body);
   display: flex;
   align-items: center;
   gap: 8px;

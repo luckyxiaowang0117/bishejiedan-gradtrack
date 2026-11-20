@@ -2,7 +2,7 @@
   <div class="stats-wrapper">
     <header class="stats-header">
       <div class="stats-header-left">
-        <el-icon :size="20" color="#6366f1"><DataLine /></el-icon>
+        <el-icon :size="20" color="var(--gt-text-violet)"><DataLine /></el-icon>
         <h2 class="stats-title">数据统计</h2>
       </div>
       <el-button @click="$emit('close')" class="close-btn">
@@ -14,7 +14,7 @@
       <!-- Graduation Year + Time Filter Bar -->
       <div class="time-filter-bar">
         <div class="time-filter-left">
-          <el-icon :size="16" color="#6366f1"><Calendar /></el-icon>
+          <el-icon :size="16" color="var(--gt-text-violet)"><Calendar /></el-icon>
           <span class="time-filter-label">毕业届</span>
         </div>
         <div class="stats-grad-seg">
@@ -34,7 +34,7 @@
       </div>
       <div class="time-filter-bar">
         <div class="time-filter-left">
-          <el-icon :size="16" color="#6366f1"><Calendar /></el-icon>
+          <el-icon :size="16" color="var(--gt-text-violet)"><Calendar /></el-icon>
           <span class="time-filter-label">统计范围</span>
         </div>
         <div class="time-filter-controls">
@@ -58,7 +58,7 @@
       <!-- KPI Cards -->
       <div class="kpi-row">
         <div class="kpi-card">
-          <div class="kpi-icon" style="background: #eef2ff; color: #6366f1;">
+          <div class="kpi-icon" style="background: var(--gt-accent-surface); color: var(--gt-text-violet);">
             <el-icon :size="22"><DataBoard /></el-icon>
           </div>
           <div class="kpi-info">
@@ -68,7 +68,7 @@
           </div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icon" style="background: #ecfdf5; color: #059669;">
+          <div class="kpi-icon" style="background: var(--gt-success-surface); color: var(--gt-text-success);">
             <el-icon :size="22"><Coin /></el-icon>
           </div>
           <div class="kpi-info">
@@ -78,7 +78,7 @@
           </div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icon" style="background: #fef3c7; color: #d97706;">
+          <div class="kpi-icon" style="background: var(--gt-warning-surface); color: var(--gt-text-warning);">
             <el-icon :size="22"><Money /></el-icon>
           </div>
           <div class="kpi-info">
@@ -88,7 +88,7 @@
           </div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icon" :style="{ background: netProfit >= 0 ? '#ecfdf5' : '#fff1f2', color: netProfit >= 0 ? '#059669' : '#e11d48' }">
+          <div class="kpi-icon" :style="{ background: netProfit >= 0 ? 'var(--gt-success-surface)' : 'var(--gt-danger-surface)', color: netProfit >= 0 ? 'var(--gt-text-success)' : 'var(--gt-text-danger)' }">
             <el-icon :size="22"><TrendCharts /></el-icon>
           </div>
           <div class="kpi-info">
@@ -135,7 +135,7 @@
             <span>类型</span><span>全款总额</span><span>派单总额</span><span>退款总额</span><span>净收入</span>
           </div>
           <div v-for="t in typeRows" :key="t.type" class="detail-row">
-            <span class="detail-type" :style="{ color: typeColorMap[t.type] }">{{ typeLabelMap[t.type] || t.type }}</span>
+            <span class="detail-type" :style="{ color: orderTypeMeta[t.type]?.color }">{{ typeLabelMap[t.type] || t.type }}</span>
             <span>¥{{ fmt(t.revenue) }}</span>
             <span>¥{{ fmt(t.dispatch) }}</span>
             <span>¥{{ fmt(t.refund) }}</span>
@@ -157,27 +157,46 @@
 
         <template v-if="handlerData">
           <!-- Handler KPI -->
+          <p v-if="handlerData.selfHandled" class="self-handler-note">按本人处理的订单统计，实收已扣除退款。</p>
           <div class="handler-kpi-row">
-            <div class="handler-kpi kpi-clickable" :class="{ 'kpi-selected': kpiFilter === 'all' }" @click="toggleKpiFilter('all')">
+            <div class="handler-kpi" :class="{ 'kpi-selected': kpiFilter === 'all', 'kpi-clickable': handlerData.total.orderCount > 0 }" @click="handlerData.total.orderCount && toggleKpiFilter('all')">
               <div class="handler-kpi-val">{{ handlerData.total.orderCount }}</div>
-              <div class="handler-kpi-label">总接单量</div>
-              <div class="kpi-hint"><el-icon :size="12"><View /></el-icon>点击查看</div>
+              <div class="handler-kpi-label">{{ handlerData.selfHandled ? '本人处理订单数' : '总接单量' }}</div>
+              <div v-if="handlerData.total.orderCount" class="kpi-hint"><el-icon :size="12"><View /></el-icon>点击查看</div>
             </div>
-            <div class="handler-kpi">
-              <div class="handler-kpi-val">¥{{ fmt(handlerData.total.totalDispatch) }}</div>
-              <div class="handler-kpi-label">应付总额</div>
-            </div>
-            <div class="handler-kpi kpi-clickable" :class="{ 'kpi-selected': kpiFilter === 'paid' }" @click="toggleKpiFilter('paid')">
-              <div class="handler-kpi-val text-green">¥{{ fmt(handlerData.total.paidAmount) }}</div>
-              <div class="handler-kpi-label">已支付 ({{ handlerData.total.paidCount }} 笔)</div>
-              <div class="kpi-hint"><el-icon :size="12"><View /></el-icon>点击查看</div>
-            </div>
-            <div class="handler-kpi kpi-clickable" :class="{ 'kpi-selected': kpiFilter === 'unpaid' }" @click="toggleKpiFilter('unpaid')">
-              <div class="handler-kpi-val text-red">¥{{ fmt(handlerData.total.unpaidAmount) }}</div>
-              <div class="handler-kpi-label">未结算 ({{ handlerData.total.unpaidCount }} 笔)</div>
-              <div class="kpi-hint"><el-icon :size="12"><View /></el-icon>点击查看</div>
-            </div>
+            <template v-if="handlerData.selfHandled">
+              <div class="handler-kpi">
+                <div class="handler-kpi-val">¥{{ fmtMoney(handlerData.total.receipts.totalAmount) }}</div>
+                <div class="handler-kpi-label">订单总额</div>
+              </div>
+              <div class="handler-kpi">
+                <div class="handler-kpi-val text-green">¥{{ fmtMoney(handlerData.total.receipts.netCollected) }}</div>
+                <div class="handler-kpi-label">实收金额</div>
+              </div>
+              <div class="handler-kpi">
+                <div class="handler-kpi-val text-red">¥{{ fmtMoney(handlerData.total.receipts.outstanding) }}</div>
+                <div class="handler-kpi-label">待收金额</div>
+              </div>
+            </template>
+            <template v-else>
+              <div class="handler-kpi">
+                <div class="handler-kpi-val">¥{{ fmt(handlerData.total.totalDispatch) }}</div>
+                <div class="handler-kpi-label">应付总额</div>
+              </div>
+              <div class="handler-kpi kpi-clickable" :class="{ 'kpi-selected': kpiFilter === 'paid' }" @click="toggleKpiFilter('paid')">
+                <div class="handler-kpi-val text-green">¥{{ fmt(handlerData.total.paidAmount) }}</div>
+                <div class="handler-kpi-label">已支付 ({{ handlerData.total.paidCount }} 笔)</div>
+                <div class="kpi-hint"><el-icon :size="12"><View /></el-icon>点击查看</div>
+              </div>
+              <div class="handler-kpi kpi-clickable" :class="{ 'kpi-selected': kpiFilter === 'unpaid' }" @click="toggleKpiFilter('unpaid')">
+                <div class="handler-kpi-val text-red">¥{{ fmt(handlerData.total.unpaidAmount) }}</div>
+                <div class="handler-kpi-label">未结算 ({{ handlerData.total.unpaidCount }} 笔)</div>
+                <div class="kpi-hint"><el-icon :size="12"><View /></el-icon>点击查看</div>
+              </div>
+            </template>
           </div>
+
+          <div v-if="handlerData.selfHandled && !handlerData.total.orderCount" class="week-empty">当前统计范围内暂无本人处理的订单</div>
 
           <!-- KPI filtered order list -->
           <div v-if="kpiFilter && kpiFilteredOrders.length > 0" class="kpi-order-list">
@@ -207,7 +226,7 @@
               </div>
               <el-button text size="small" @click="kpiFilter = ''">收起</el-button>
             </div>
-            <div v-if="handlerOrderSummary" class="receiver-summary-bar">
+            <div v-if="handlerOrderSummary && !handlerData.selfHandled" class="receiver-summary-bar">
               <span v-if="selectedReceiverInHandler" class="receiver-summary-name">{{ selectedReceiverInHandler }}</span>
               <span class="receiver-summary-item">
                 {{ kpiFilterLabel }} <strong>{{ handlerOrderSummary.count }}</strong> 笔
@@ -223,8 +242,11 @@
               </span>
             </div>
             <div class="week-orders">
-              <div class="week-order-header" :class="kpiFilter === 'unpaid' ? 'handler-order-6col' : 'handler-order-5col'">
-                <template v-if="kpiFilter === 'unpaid'">
+              <div class="week-order-header" :class="handlerData.selfHandled ? 'self-handler-list-row' : kpiFilter === 'unpaid' ? 'handler-order-6col' : 'handler-order-5col'">
+                <template v-if="handlerData.selfHandled">
+                  <span>订单名称</span><span>接单人</span><span>类型</span>
+                </template>
+                <template v-else-if="kpiFilter === 'unpaid'">
                   <span>订单名称</span><span>接单人</span><span>类型</span><span>总金额</span><span>已付金额</span><span>未结金额</span>
                 </template>
                 <template v-else>
@@ -235,18 +257,18 @@
                 v-for="o in kpiFilteredOrders"
                 :key="o.id"
                 class="week-order-row"
-                :class="kpiFilter === 'unpaid' ? 'handler-order-6col' : 'handler-order-5col'"
+                :class="handlerData.selfHandled ? 'self-handler-list-row' : kpiFilter === 'unpaid' ? 'handler-order-6col' : 'handler-order-5col'"
                 @click="$emit('navigate-order', o.id)"
               >
                 <span class="week-order-title">{{ o.title || '待补充题目' }}</span>
                 <span class="receiver-tag">{{ o.receiver || '本人' }}</span>
-                <span :style="{ color: typeColorMap[o.orderType] }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
-                <template v-if="kpiFilter === 'unpaid'">
+                <span :style="{ color: orderTypeMeta[o.orderType]?.color }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
+                <template v-if="!handlerData.selfHandled && kpiFilter === 'unpaid'">
                   <span>¥{{ fmt(o.dispatchAmount) }}</span>
                   <span class="text-green">¥{{ fmt(o.handlerPaidAmount) }}</span>
                   <span class="text-red">¥{{ fmt((o.dispatchAmount || 0) - (o.handlerPaidAmount || 0)) }}</span>
                 </template>
-                <template v-else>
+                <template v-else-if="!handlerData.selfHandled">
                   <span>¥{{ fmt(o.dispatchAmount) }}</span>
                   <el-tag :type="(o.handlerPaidAmount || 0) >= (o.dispatchAmount || 0) && o.dispatchAmount > 0 ? 'success' : 'warning'" size="small" effect="plain">
                     {{ (o.handlerPaidAmount || 0) >= (o.dispatchAmount || 0) && o.dispatchAmount > 0 ? '已结清' : '已付¥' + fmt(o.handlerPaidAmount || 0) }}
@@ -270,42 +292,56 @@
           <!-- Week summary -->
           <div class="week-summary">
             <div class="week-stat">
-              <span class="week-stat-label">本周接单</span>
+              <span class="week-stat-label">{{ handlerData.selfHandled ? '本周处理' : '本周接单' }}</span>
               <span class="week-stat-val">{{ handlerData.week.orderCount }} 单</span>
             </div>
             <div class="week-stat">
-              <span class="week-stat-label">本周应付</span>
-              <span class="week-stat-val">¥{{ fmt(handlerData.week.totalDispatch) }}</span>
+              <span class="week-stat-label">{{ handlerData.selfHandled ? '本周订单总额' : '本周应付' }}</span>
+              <span class="week-stat-val">¥{{ handlerData.selfHandled ? fmtMoney(handlerData.week.receipts.totalAmount) : fmt(handlerData.week.totalDispatch) }}</span>
             </div>
             <div class="week-stat">
-              <span class="week-stat-label">本周已付</span>
-              <span class="week-stat-val text-green">¥{{ fmt(handlerData.week.paidAmount) }}</span>
+              <span class="week-stat-label">{{ handlerData.selfHandled ? '本周实收' : '本周已付' }}</span>
+              <span class="week-stat-val text-green">¥{{ handlerData.selfHandled ? fmtMoney(handlerData.week.receipts.netCollected) : fmt(handlerData.week.paidAmount) }}</span>
             </div>
             <div class="week-stat">
-              <span class="week-stat-label">本周未结</span>
-              <span class="week-stat-val text-red">¥{{ fmt(handlerData.week.unpaidAmount) }}</span>
+              <span class="week-stat-label">{{ handlerData.selfHandled ? '本周待收' : '本周未结' }}</span>
+              <span class="week-stat-val text-red">¥{{ handlerData.selfHandled ? fmtMoney(handlerData.week.receipts.outstanding) : fmt(handlerData.week.unpaidAmount) }}</span>
             </div>
           </div>
 
           <!-- Week orders list -->
-          <div v-if="handlerData.week.orders.length > 0" class="week-orders">
+          <div v-if="handlerData.week.orders.length > 0" class="week-orders" :class="{ 'self-handler-week-orders': handlerData.selfHandled }">
             <div class="week-order-header">
-              <span>订单名称</span><span>类型</span><span>派单金额</span><span>状态</span>
+              <span>订单名称</span>
+              <template v-if="handlerData.selfHandled">
+                <span>接单人</span><span>订单金额</span><span>实收</span><span>待收</span>
+              </template>
+              <template v-else>
+                <span>类型</span><span>派单金额</span><span>状态</span>
+              </template>
             </div>
             <div v-for="o in handlerData.week.orders" :key="o.id" class="week-order-row" @click="$emit('navigate-order', o.id)">
               <span class="week-order-title">{{ o.title || '待补充题目' }}</span>
-              <span :style="{ color: typeColorMap[o.orderType] }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
-              <span>¥{{ fmt(o.dispatchAmount) }}</span>
-              <el-tag :type="(o.handlerPaidAmount || 0) >= (o.dispatchAmount || 0) && o.dispatchAmount > 0 ? 'success' : 'warning'" size="small" effect="plain">
-                {{ (o.handlerPaidAmount || 0) >= (o.dispatchAmount || 0) && o.dispatchAmount > 0 ? '已结清' : '已付¥' + fmt(o.handlerPaidAmount || 0) }}
-              </el-tag>
+              <template v-if="handlerData.selfHandled">
+                <span class="receiver-tag" :title="o.receiver">{{ o.receiver }}</span>
+                <span>¥{{ fmtMoney(o.totalAmount) }}</span>
+                <span class="text-green">¥{{ fmtMoney(o.netCollected) }}</span>
+                <span class="text-red">¥{{ fmtMoney(o.outstanding) }}</span>
+              </template>
+              <template v-else>
+                <span :style="{ color: orderTypeMeta[o.orderType]?.color }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
+                <span>¥{{ fmt(o.dispatchAmount) }}</span>
+                <el-tag :type="(o.handlerPaidAmount || 0) >= (o.dispatchAmount || 0) && o.dispatchAmount > 0 ? 'success' : 'warning'" size="small" effect="plain">
+                  {{ (o.handlerPaidAmount || 0) >= (o.dispatchAmount || 0) && o.dispatchAmount > 0 ? '已结清' : '已付¥' + fmt(o.handlerPaidAmount || 0) }}
+                </el-tag>
+              </template>
             </div>
           </div>
           <div v-else class="week-empty">本周暂无订单记录</div>
         </template>
 
         <div v-else class="handler-placeholder">
-          <el-icon :size="28" color="#cbd5e1"><User /></el-icon>
+          <el-icon :size="28" color="var(--gt-border-strong)"><User /></el-icon>
           <span>请选择处理人查看详细结算数据</span>
         </div>
       </div>
@@ -398,7 +434,7 @@
               </div>
               <div v-for="o in filteredReceiverUnsettledOrders" :key="o.id" class="week-order-row receiver-unsettled-6col" @click="$emit('navigate-order', o.id)">
                 <span class="week-order-title">{{ o.title }}</span>
-                <span :style="{ color: typeColorMap[o.orderType] }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
+                <span :style="{ color: orderTypeMeta[o.orderType]?.color }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
                 <span>{{ o.handler || '本人' }}</span>
                 <span>¥{{ fmt(o.totalAmount) }}</span>
                 <span class="text-green">¥{{ fmt(o.paidAmount) }}</span>
@@ -406,11 +442,11 @@
               </div>
             </div>
           </div>
-          <div v-else class="week-empty">该接单人名下无未结算订单</div>
+          <div v-else class="week-empty">{{ receiverData.total.orderCount ? '该接单人名下无未结算订单' : '当前统计范围内该接单人暂无订单' }}</div>
         </template>
 
         <div v-else class="handler-placeholder">
-          <el-icon :size="28" color="#cbd5e1"><User /></el-icon>
+          <el-icon :size="28" color="var(--gt-border-strong)"><User /></el-icon>
           <span>请选择接单人查看结算统计</span>
         </div>
       </div>
@@ -432,6 +468,8 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { PieChart, BarChart, LineChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
+import { orderTypeMeta } from '../orderTypeMeta.js'
+import { appearanceMode } from '../appearance.js'
 
 use([CanvasRenderer, PieChart, BarChart, LineChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
 
@@ -440,14 +478,20 @@ const api = window.electronAPI
 const currentUser = inject('currentUser')
 const data = ref(null)
 
-const typeLabelMap = {
-  thesis: '毕设论文',
-  format: '格式修改',
-  translation: '外文翻译',
-  design: '设计定制',
-  reduction: '论文降重',
-  special: '特殊订单',
-}
+const typeLabelMap = Object.fromEntries(Object.entries(orderTypeMeta).map(([key, type]) => [key, type.label]))
+const chartPalette = computed(() => appearanceMode.value === 'dark'
+  ? { text: '#e6e6e6', grid: '#343434', border: '#515151', surface: '#222222', blue: '#a5b4fc', green: '#6ee7b7', amber: '#fcd58a', red: '#fda4af' }
+  : { text: '#334155', grid: '#e2e8f0', border: '#cbd5e1', surface: '#ffffff', blue: '#6366f1', green: '#10b981', amber: '#f59e0b', red: '#ef4444' }
+)
+
+const chartLabelStyle = computed(() => ({ color: chartPalette.value.text, fontWeight: 500 }))
+const chartAxisLine = computed(() => ({ lineStyle: { color: chartPalette.value.border } }))
+const chartSplitLine = computed(() => ({ lineStyle: { color: chartPalette.value.grid } }))
+const chartTooltipStyle = computed(() => ({
+  backgroundColor: chartPalette.value.surface,
+  borderColor: chartPalette.value.border,
+  textStyle: chartLabelStyle.value,
+}))
 const typeColorMap = {
   thesis: '#6366f1',
   format: '#0ea5e9',
@@ -478,18 +522,28 @@ function getStatsParams() {
 }
 
 function onGradYearChanged(val) {
+  if (statsGradYear.value === val) return
   statsGradYear.value = val
-  selectedHandler.value = ''
-  handlerData.value = null
-  selectedReceiver.value = ''
-  receiverData.value = null
-  kpiFilter.value = ''
   loadStats()
 }
 
+let summaryRequest = 0
+
 async function loadStats() {
-  if (!currentUser.value || !currentUser.value.id) return
-  data.value = await api.getStats(getStatsParams())
+  const scope = getStatsParams()
+  if (!scope.userId) return
+  const request = ++summaryRequest
+  ++handlerRequest
+  ++receiverRequest
+  handlerData.value = null
+  receiverData.value = null
+  loadingWeek.value = false
+  const summary = await api.getStats(scope)
+  if (request !== summaryRequest) return
+  data.value = summary
+  if (!summary.handlerOptions.includes(selectedHandler.value)) selectedHandler.value = ''
+  if (!summary.receiverOptions.includes(selectedReceiver.value)) selectedReceiver.value = ''
+  await Promise.all([loadHandlerDetail(), loadReceiverDetail()])
 }
 
 const yearSelectRef = ref(null)
@@ -504,9 +558,7 @@ function onMonthChanged() {
   loadStats()
 }
 
-watch(timeMode, (val) => {
-  loadStats()
-})
+watch(timeMode, loadStats)
 
 const trendTitle = computed(() => {
   if (data.value && data.value.trendMode === 'daily') return '每日趋势'
@@ -518,10 +570,8 @@ const handlerData = ref(null)
 const weekOffset = ref(0)
 const loadingWeek = ref(false)
 
-const handlerList = computed(() => {
-  if (!data.value) return []
-  return data.value.byHandler.map(h => h.name).filter(name => name && name !== '本人')
-})
+const handlerList = computed(() => data.value?.handlerOptions || [])
+let handlerRequest = 0
 
 const kpiFilter = ref('')
 
@@ -588,28 +638,33 @@ watch(selectedReceiverInHandler, () => {
   handlerOrderTypeFilter.value = 'all'
 })
 
-async function loadHandlerDetail() {
-  if (!selectedHandler.value || !currentUser.value || !currentUser.value.id) {
-    handlerData.value = null
-    handlerOrderTypeFilter.value = 'all'
-    return
+async function fetchHandlerDetail(offset) {
+  const request = ++handlerRequest
+  const scope = getStatsParams()
+  if (!selectedHandler.value || !scope.userId) return
+  try {
+    const result = await api.getHandlerDetail(scope, selectedHandler.value, offset)
+    if (request !== handlerRequest) return
+    handlerData.value = result
+    weekOffset.value = offset
+  } finally {
+    if (request === handlerRequest) loadingWeek.value = false
   }
+}
+
+function loadHandlerDetail() {
+  handlerData.value = null
+  loadingWeek.value = false
   weekOffset.value = 0
   kpiFilter.value = ''
   selectedReceiverInHandler.value = ''
   handlerOrderTypeFilter.value = 'all'
-  const gradYear = statsGradYear.value === 'all' ? null : statsGradYear.value
-  handlerData.value = await api.getHandlerDetail(currentUser.value.id, selectedHandler.value, 0, gradYear)
+  return fetchHandlerDetail(0)
 }
 
-async function changeWeek(dir) {
-  if (!currentUser.value || !currentUser.value.id) return
+function changeWeek(dir) {
   loadingWeek.value = true
-  weekOffset.value += dir
-  if (weekOffset.value < 0) weekOffset.value = 0
-  const gradYear = statsGradYear.value === 'all' ? null : statsGradYear.value
-  handlerData.value = await api.getHandlerDetail(currentUser.value.id, selectedHandler.value, weekOffset.value, gradYear)
-  loadingWeek.value = false
+  return fetchHandlerDetail(Math.max(0, weekOffset.value + dir))
 }
 
 // --- Receiver Detail ---
@@ -617,10 +672,8 @@ const selectedReceiver = ref('')
 const receiverData = ref(null)
 const receiverUnsettledTypeFilter = ref('all')
 
-const receiverList = computed(() => {
-  if (!data.value) return []
-  return data.value.byReceiver.map(r => r.name)
-})
+const receiverList = computed(() => data.value?.receiverOptions || [])
+let receiverRequest = 0
 
 const receiverUnsettledOrders = computed(() => {
   if (!receiverData.value) return []
@@ -649,14 +702,13 @@ const receiverUnsettledSummary = computed(() => {
 })
 
 async function loadReceiverDetail() {
-  if (!selectedReceiver.value || !currentUser.value || !currentUser.value.id) {
-    receiverData.value = null
-    receiverUnsettledTypeFilter.value = 'all'
-    return
-  }
+  const request = ++receiverRequest
+  const scope = getStatsParams()
+  receiverData.value = null
   receiverUnsettledTypeFilter.value = 'all'
-  const gradYear = statsGradYear.value === 'all' ? null : statsGradYear.value
-  receiverData.value = await api.getReceiverDetail(currentUser.value.id, selectedReceiver.value, gradYear)
+  if (!selectedReceiver.value || !scope.userId) return
+  const result = await api.getReceiverDetail(scope, selectedReceiver.value)
+  if (request === receiverRequest) receiverData.value = result
 }
 
 onMounted(async () => {
@@ -673,6 +725,8 @@ onMounted(async () => {
 })
 
 function fmt(n) { return (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) }
+const moneyFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 })
+function fmtMoney(amount) { return moneyFormat.format(amount ?? 0) }
 
 const netProfit = computed(() => {
   if (!data.value) return 0
@@ -693,14 +747,14 @@ const typeRows = computed(() => {
 const typeChartOption = computed(() => {
   if (!data.value) return {}
   return {
-    tooltip: { trigger: 'item', formatter: '{b}: {c} 单 ({d}%)' },
-    legend: { bottom: 0, textStyle: { fontSize: 12 } },
+    tooltip: { ...chartTooltipStyle.value, trigger: 'item', formatter: '{b}: {c} 单 ({d}%)' },
+    legend: { bottom: 0, textStyle: { ...chartLabelStyle.value, fontSize: 12 } },
     color: Object.values(typeColorMap),
     series: [{
       type: 'pie',
       radius: ['45%', '70%'],
       center: ['50%', '45%'],
-      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+      itemStyle: { borderRadius: 6, borderColor: chartPalette.value.surface, borderWidth: 2 },
       label: { show: false },
       data: data.value.byType.map(t => ({
         name: typeLabelMap[t.orderType] || t.orderType,
@@ -714,11 +768,11 @@ const revenueChartOption = computed(() => {
   if (!data.value) return {}
   const types = data.value.byType
   return {
-    tooltip: { trigger: 'axis', formatter: (p) => p.map(i => `${i.seriesName}: ¥${(i.value || 0).toLocaleString()}`).join('<br/>') },
+    tooltip: { ...chartTooltipStyle.value, trigger: 'axis', formatter: (p) => p.map(i => `${i.seriesName}: ¥${(i.value || 0).toLocaleString()}`).join('<br/>') },
     grid: { left: 60, right: 20, top: 20, bottom: 40 },
-    xAxis: { type: 'category', data: types.map(t => typeLabelMap[t.orderType] || t.orderType), axisLabel: { fontSize: 12 } },
-    yAxis: { type: 'value', axisLabel: { fontSize: 11, formatter: '¥{value}' } },
-    color: ['#6366f1', '#f59e0b', '#ef4444'],
+    xAxis: { type: 'category', axisLine: chartAxisLine.value, data: types.map(t => typeLabelMap[t.orderType] || t.orderType), axisLabel: { ...chartLabelStyle.value, fontSize: 12 } },
+    yAxis: { type: 'value', splitLine: chartSplitLine.value, axisLabel: { ...chartLabelStyle.value, fontSize: 11, formatter: '¥{value}' } },
+    color: [chartPalette.value.blue, chartPalette.value.amber, chartPalette.value.red],
     series: [
       { name: '全款', type: 'bar', data: types.map(t => t.revenue || 0), barWidth: 20, itemStyle: { borderRadius: [4, 4, 0, 0] } },
       { name: '派单', type: 'bar', data: types.map(t => t.dispatch || 0), barWidth: 20, itemStyle: { borderRadius: [4, 4, 0, 0] } },
@@ -731,16 +785,16 @@ const statusChartOption = computed(() => {
   if (!data.value) return {}
   const items = data.value.byStatus || []
   return {
-    tooltip: { trigger: 'axis' },
+    tooltip: { ...chartTooltipStyle.value, trigger: 'axis' },
     grid: { left: 80, right: 20, top: 20, bottom: 40 },
-    xAxis: { type: 'value', axisLabel: { fontSize: 11 } },
-    yAxis: { type: 'category', data: items.map(i => typeLabelMap[i.orderType] || i.orderType), axisLabel: { fontSize: 12 } },
-    color: ['#f59e0b', '#10b981'],
+    xAxis: { type: 'value', splitLine: chartSplitLine.value, axisLabel: { ...chartLabelStyle.value, fontSize: 11 } },
+    yAxis: { type: 'category', axisLine: chartAxisLine.value, data: items.map(i => typeLabelMap[i.orderType] || i.orderType), axisLabel: { ...chartLabelStyle.value, fontSize: 12 } },
+    color: [chartPalette.value.amber, chartPalette.value.green],
     series: [
       { name: '待提交', type: 'bar', stack: 'total', data: items.map(i => i.draftPending), itemStyle: { borderRadius: [0, 0, 0, 0] } },
       { name: '已提交', type: 'bar', stack: 'total', data: items.map(i => i.draftDone), itemStyle: { borderRadius: [0, 4, 4, 0] } },
     ],
-    legend: { bottom: 0, textStyle: { fontSize: 12 } },
+    legend: { bottom: 0, textStyle: { ...chartLabelStyle.value, fontSize: 12 } },
   }
 })
 
@@ -750,37 +804,36 @@ const trendChartOption = computed(() => {
   const isDaily = data.value.trendMode === 'daily'
   const labels = isDaily ? trend.map(t => t.day + '日') : trend.map(t => t.month)
   return {
-    tooltip: { trigger: 'axis' },
+    tooltip: { ...chartTooltipStyle.value, trigger: 'axis' },
     grid: { left: 60, right: 40, top: 20, bottom: 40 },
-    xAxis: { type: 'category', data: labels, axisLabel: { fontSize: 11, rotate: isDaily ? 45 : 0 } },
+    xAxis: { type: 'category', axisLine: chartAxisLine.value, data: labels, axisLabel: { ...chartLabelStyle.value, fontSize: 11, rotate: isDaily ? 45 : 0 } },
     yAxis: [
-      { type: 'value', name: '订单数', axisLabel: { fontSize: 11 }, nameTextStyle: { fontSize: 11 } },
-      { type: 'value', name: '收入(¥)', axisLabel: { fontSize: 11, formatter: '¥{value}' }, nameTextStyle: { fontSize: 11 } },
+      { type: 'value', name: '订单数', splitLine: chartSplitLine.value, axisLabel: { ...chartLabelStyle.value, fontSize: 11 }, nameTextStyle: { ...chartLabelStyle.value, fontSize: 11 } },
+      { type: 'value', name: '收入(¥)', splitLine: chartSplitLine.value, axisLabel: { ...chartLabelStyle.value, fontSize: 11, formatter: '¥{value}' }, nameTextStyle: { ...chartLabelStyle.value, fontSize: 11 } },
     ],
-    color: ['#6366f1', '#10b981'],
+    color: [chartPalette.value.blue, chartPalette.value.green],
     series: [
       { name: '订单数', type: 'bar', data: trend.map(t => t.count), barWidth: isDaily ? 12 : 18, itemStyle: { borderRadius: [4, 4, 0, 0] } },
       { name: '收入', type: 'line', yAxisIndex: 1, data: trend.map(t => t.revenue || 0), smooth: true, lineStyle: { width: 2.5 }, symbolSize: 6 },
     ],
-    legend: { bottom: 0, textStyle: { fontSize: 12 } },
+    legend: { bottom: 0, textStyle: { ...chartLabelStyle.value, fontSize: 12 } },
   }
 })
 
 function rankChart(items) {
-  if (!items || items.length === 0) return {}
-  const sorted = [...items].reverse()
+  const sorted = [...(items || [])].reverse()
   return {
-    tooltip: { trigger: 'axis', formatter: (p) => `${p[0].name}: ${p[0].value} 单` },
+    tooltip: { ...chartTooltipStyle.value, trigger: 'axis', formatter: (p) => `${p[0].name}: ${p[0].value} 单` },
     grid: { left: 80, right: 30, top: 10, bottom: 10 },
     xAxis: { type: 'value', show: false },
-    yAxis: { type: 'category', data: sorted.map(i => i.name), axisLabel: { fontSize: 12 } },
-    color: ['#6366f1'],
+    yAxis: { type: 'category', axisLine: chartAxisLine.value, data: sorted.map(i => i.name), axisLabel: { ...chartLabelStyle.value, fontSize: 12 } },
+    color: [chartPalette.value.blue],
     series: [{
       type: 'bar',
       data: sorted.map(i => i.count),
       barWidth: 16,
       itemStyle: { borderRadius: [0, 4, 4, 0] },
-      label: { show: true, position: 'right', fontSize: 11, formatter: '{c} 单' },
+      label: { show: true, position: 'right', ...chartLabelStyle.value, fontSize: 11, formatter: '{c} 单' },
     }],
   }
 }
@@ -796,8 +849,8 @@ function rankChart(items) {
 
 .stats-header {
   height: var(--gt-topbar-height);
-  background: #fff;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--gt-surface);
+  border-bottom: 1px solid var(--gt-border);
   padding: 0 var(--gt-page-pad);
   display: flex;
   align-items: center;
@@ -812,7 +865,7 @@ function rankChart(items) {
 .stats-title {
   font-size: var(--gt-title-lg);
   font-weight: 700;
-  color: #1e293b;
+  color: var(--gt-text-body);
 }
 .close-btn {
   border-radius: 8px !important;
@@ -829,8 +882,8 @@ function rankChart(items) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--gt-surface);
+  border: 1px solid var(--gt-border);
   border-radius: 12px;
   padding: 10px 16px;
   margin-bottom: 16px;
@@ -844,7 +897,7 @@ function rankChart(items) {
 .time-filter-label {
   font-size: var(--gt-text-sm);
   font-weight: 600;
-  color: #334155;
+  color: light-dark(#334155, var(--gt-text-body));
 }
 .stats-grad-seg {
   display: flex;
@@ -855,11 +908,11 @@ function rankChart(items) {
 .stats-grad-btn {
   padding: 5px 14px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #64748b;
+  border: 1px solid var(--gt-border-strong);
+  background: var(--gt-surface);
+  color: var(--gt-text-main);
   border-radius: 16px;
   transition: all 0.15s;
   display: inline-flex;
@@ -868,9 +921,9 @@ function rankChart(items) {
   white-space: nowrap;
 }
 .stats-grad-btn:hover {
-  color: #4f46e5;
-  border-color: #c7d2fe;
-  background: #eef2ff;
+  color: light-dark(#4f46e5, #c7d2fe);
+  border-color: var(--gt-accent-border);
+  background: var(--gt-accent-surface);
 }
 .stats-grad-active {
   background: #4f46e5;
@@ -899,9 +952,9 @@ function rankChart(items) {
 }
 .time-filter-summary {
   font-size: var(--gt-text-sm);
-  color: #6366f1;
-  font-weight: 500;
-  background: #eef2ff;
+  color: var(--gt-text-violet);
+  font-weight: 600;
+  background: var(--gt-accent-surface);
   padding: 4px 12px;
   border-radius: 6px;
 }
@@ -914,8 +967,8 @@ function rankChart(items) {
   margin-bottom: var(--gt-card-gap);
 }
 .kpi-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--gt-surface);
+  border: 1px solid var(--gt-border-strong);
   border-radius: 14px;
   padding: var(--gt-card-pad);
   display: flex;
@@ -934,18 +987,20 @@ function rankChart(items) {
 }
 .kpi-value {
   font-size: var(--gt-title-xl);
-  font-weight: 700;
-  color: #1e293b;
+  font-weight: 800;
+  color: var(--gt-text-heading);
   line-height: 1.2;
 }
 .kpi-label {
-  font-size: 12px;
-  color: #94a3b8;
+  font-size: 13px;
+  color: var(--gt-text-main);
+  font-weight: 700;
   margin-top: 2px;
 }
 .kpi-sub {
-  font-size: 11px;
-  color: #64748b;
+  font-size: 12px;
+  color: var(--gt-text-main);
+  font-weight: 600;
   margin-top: 2px;
 }
 
@@ -960,8 +1015,8 @@ function rankChart(items) {
   grid-template-columns: 1fr 1fr 1fr;
 }
 .chart-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--gt-surface);
+  border: 1px solid var(--gt-border);
   border-radius: 14px;
   padding: var(--gt-card-pad);
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
@@ -969,7 +1024,7 @@ function rankChart(items) {
 .chart-title {
   font-size: var(--gt-text-sm);
   font-weight: 600;
-  color: #334155;
+  color: light-dark(#334155, var(--gt-text-body));
   margin-bottom: 12px;
 }
 .chart {
@@ -994,21 +1049,21 @@ function rankChart(items) {
   font-size: 13px;
 }
 .detail-header {
-  background: #f8fafc;
+  background: var(--gt-surface-subtle);
   border-radius: 8px;
-  font-weight: 600;
-  color: #64748b;
+  font-weight: 700;
+  color: var(--gt-text-main);
 }
 .detail-row {
-  border-bottom: 1px solid #f1f5f9;
-  color: #334155;
+  border-bottom: 1px solid var(--gt-border);
+  color: var(--gt-text-main);
   font-weight: 500;
 }
 .detail-type {
-  font-weight: 600;
+  font-weight: 700;
 }
-.text-green { color: #059669; }
-.text-red { color: #e11d48; }
+.text-green { color: var(--gt-text-success); }
+.text-red { color: var(--gt-text-danger); }
 
 /* Handler Detail */
 .handler-detail-card {
@@ -1026,25 +1081,42 @@ function rankChart(items) {
   gap: 12px;
   margin-bottom: 20px;
 }
+.self-handler-note {
+  margin: 0 0 10px;
+  color: var(--gt-text-body);
+  font-size: 13px;
+  font-weight: 600;
+}
+.week-orders .self-handler-list-row {
+  grid-template-columns: 2fr 1fr 1fr;
+}
+.self-handler-week-orders .week-order-header,
+.self-handler-week-orders .week-order-row {
+  grid-template-columns: minmax(0, 2fr) repeat(4, minmax(0, 1fr));
+}
+.self-handler-week-orders .week-order-row > :not(.week-order-title) {
+  overflow-wrap: anywhere;
+}
 .handler-kpi {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--gt-border-strong);
   border-radius: 10px;
   padding: 14px 16px;
   text-align: center;
 }
-.handler-kpi:nth-child(1) { background: #eef2ff; border-color: #c7d2fe; }
-.handler-kpi:nth-child(2) { background: #f0f9ff; border-color: #bae6fd; }
-.handler-kpi:nth-child(3) { background: #ecfdf5; border-color: #a7f3d0; }
-.handler-kpi:nth-child(4) { background: #fff1f2; border-color: #fecdd3; }
+.handler-kpi:nth-child(1) { background: var(--gt-accent-surface); border-color: var(--gt-accent-border); }
+.handler-kpi:nth-child(2) { background: light-dark(#f0f9ff, var(--gt-surface-muted)); border-color: light-dark(#bae6fd, var(--gt-border)); }
+.handler-kpi:nth-child(3) { background: light-dark(var(--gt-success-surface), var(--gt-surface-muted)); border-color: light-dark(var(--gt-success-border), var(--gt-border)); }
+.handler-kpi:nth-child(4) { background: light-dark(#fff1f2, var(--gt-surface-muted)); border-color: light-dark(var(--gt-danger-border), var(--gt-border)); }
 .handler-kpi-val {
   font-size: 20px;
-  font-weight: 700;
-  color: #1e293b;
+  font-weight: 800;
+  color: var(--gt-text-heading);
   line-height: 1.2;
 }
 .handler-kpi-label {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: 12px;
+  color: var(--gt-text-main);
+  font-weight: 700;
   margin-top: 4px;
 }
 
@@ -1055,13 +1127,13 @@ function rankChart(items) {
   gap: 16px;
   margin-bottom: 16px;
   padding: 10px;
-  background: #f8fafc;
+  background: var(--gt-surface-subtle);
   border-radius: 8px;
 }
 .week-label {
   font-size: 14px;
-  font-weight: 600;
-  color: #334155;
+  font-weight: 700;
+  color: var(--gt-text-heading);
   min-width: 200px;
   text-align: center;
 }
@@ -1078,22 +1150,23 @@ function rankChart(items) {
   align-items: center;
   gap: 4px;
   padding: 10px;
-  background: #fff;
-  border: 1px solid #f1f5f9;
+  background: var(--gt-surface);
+  border: 1px solid var(--gt-border-strong);
   border-radius: 8px;
 }
 .week-stat-label {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: 12px;
+  color: var(--gt-text-main);
+  font-weight: 700;
 }
 .week-stat-val {
   font-size: 15px;
-  font-weight: 600;
-  color: #1e293b;
+  font-weight: 700;
+  color: var(--gt-text-heading);
 }
 
 .week-orders {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--gt-border-strong);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -1106,22 +1179,22 @@ function rankChart(items) {
   align-items: center;
 }
 .week-order-header {
-  background: #f8fafc;
-  font-weight: 600;
-  color: #64748b;
+  background: var(--gt-surface-subtle);
+  font-weight: 700;
+  color: var(--gt-text-main);
 }
 .week-order-row {
-  border-top: 1px solid #f1f5f9;
-  color: #334155;
+  border-top: 1px solid var(--gt-border-strong);
+  color: var(--gt-text-main);
 }
 .week-order-row {
   cursor: pointer;
 }
 .week-order-row:hover {
-  background: #eef2ff;
+  background: var(--gt-accent-surface);
 }
 .week-order-title {
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1129,7 +1202,8 @@ function rankChart(items) {
 .week-empty {
   text-align: center;
   padding: 24px;
-  color: #94a3b8;
+  color: var(--gt-text-main);
+  font-weight: 600;
   font-size: 13px;
 }
 .kpi-clickable {
@@ -1146,12 +1220,12 @@ function rankChart(items) {
   justify-content: center;
   gap: 3px;
   font-size: 11px;
-  color: #a0aec0;
+  color: var(--gt-text-muted);
   margin-top: 6px;
   transition: color 0.15s;
 }
 .kpi-clickable:hover .kpi-hint {
-  color: #6366f1;
+  color: var(--gt-text-accent);
 }
 .kpi-selected {
   box-shadow: 0 0 0 2px #6366f1 !important;
@@ -1165,7 +1239,7 @@ function rankChart(items) {
   justify-content: space-between;
   font-size: 13px;
   font-weight: 600;
-  color: #334155;
+  color: light-dark(#334155, var(--gt-text-body));
   margin-bottom: 8px;
 }
 .handler-placeholder {
@@ -1174,7 +1248,8 @@ function rankChart(items) {
   align-items: center;
   gap: 8px;
   padding: 40px;
-  color: #94a3b8;
+  color: var(--gt-text-main);
+  font-weight: 600;
   font-size: 13px;
 }
 
@@ -1192,8 +1267,8 @@ function rankChart(items) {
 }
 .receiver-tag {
   font-size: 12px;
-  color: #6366f1;
-  font-weight: 500;
+  color: var(--gt-text-violet);
+  font-weight: 600;
 }
 .receiver-summary-bar {
   display: flex;
@@ -1201,15 +1276,15 @@ function rankChart(items) {
   gap: 16px;
   padding: 10px 16px;
   margin-bottom: 8px;
-  background: #fffbeb;
-  border: 1px solid #fef3c7;
+  background: var(--gt-warning-surface);
+  border: 1px solid var(--gt-warning-border);
   border-radius: 8px;
   font-size: 13px;
-  color: #92400e;
+  color: var(--gt-text-warning);
 }
 .receiver-summary-name {
   font-weight: 700;
-  color: #6366f1;
+  color: var(--gt-text-violet);
 }
 .receiver-summary-item strong {
   font-weight: 700;
@@ -1220,9 +1295,9 @@ function rankChart(items) {
   margin-bottom: 16px;
 }
 .sub-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #475569;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--gt-text-main);
   margin-bottom: 10px;
   margin-top: 4px;
 }
@@ -1256,18 +1331,19 @@ function rankChart(items) {
   flex-direction: column;
   gap: 6px;
   padding: 12px 14px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--gt-border-strong);
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--gt-surface-subtle);
 }
 .receiver-unsettled-summary-label {
   font-size: 12px;
-  color: #64748b;
+  color: var(--gt-text-main);
+  font-weight: 700;
 }
 .receiver-unsettled-summary-value {
   font-size: 18px;
-  font-weight: 700;
-  color: #1e293b;
+  font-weight: 800;
+  color: var(--gt-text-heading);
 }
 .receiver-unsettled-6col {
   grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr !important;
@@ -1295,7 +1371,8 @@ function rankChart(items) {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: #94a3b8;
+  color: var(--gt-text-main);
+  font-weight: 600;
   font-size: 14px;
 }
 .loading-spin {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, screen } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, nativeTheme, screen } = require('electron')
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
@@ -26,6 +26,15 @@ function setSettingValue(key, value) {
   const db = getDb()
   if (!db) return
   db.prepare('INSERT OR REPLACE INTO Settings (key, value) VALUES (?, ?)').run(key, value)
+}
+
+function appearanceBackground(mode) {
+  return mode === 'dark' ? '#0d0d0d' : '#f8fafc'
+}
+
+function applyNativeAppearance(mode) {
+  nativeTheme.themeSource = mode
+  mainWindow?.setBackgroundColor(appearanceBackground(mode))
 }
 
 function getValidatedWindowState() {
@@ -121,11 +130,14 @@ if (!gotLock) {
 
 function createWindow() {
   const savedState = getValidatedWindowState()
+  const appearanceMode = getSettingValue('appearanceMode') === 'dark' ? 'dark' : 'light'
+  nativeTheme.themeSource = appearanceMode
   const winOptions = {
     width: savedState.width,
     height: savedState.height,
     minWidth: DEFAULT_WINDOW_STATE.minWidth,
     minHeight: DEFAULT_WINDOW_STATE.minHeight,
+    backgroundColor: appearanceBackground(appearanceMode),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -153,9 +165,9 @@ function createWindow() {
   }
 
   if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
-    mainWindow.loadURL('http://localhost:5173')
+    mainWindow.loadURL(`http://localhost:5173/?appearanceMode=${appearanceMode}`)
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'), { query: { appearanceMode } })
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -192,9 +204,9 @@ function createWindow() {
 app.whenReady().then(() => {
   initDatabase()
   backfillMissingOrderCodes()
+  registerIpcHandlers()
   createWindow()
   createTray()
-  registerIpcHandlers()
 
   app.on('activate', () => {
     if (mainWindow) {
@@ -639,6 +651,54 @@ function validateOrderFolderDeletion(folderPath, rootDirectory) {
   }
 
   return { ok: true, missing: false, path: normalized }
+}
+
+// Keep legacy blank assignments and the explicit self assignment in the same group.
+const statsHandler = statsPersonColumn('handler')
+const statsReceiver = statsPersonColumn('receiver')
+const statsOutsourced = `${statsHandler} != '本人'`
+
+function statsPersonColumn(column) {
+  return `COALESCE(NULLIF(TRIM(${column}, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279)), ''), '本人')`
+}
+
+function statsPersonOptions(rows) {
+  const names = rows.map(row => row.name).filter(name => name !== '本人')
+  return ['本人', ...names.sort((a, b) => a.localeCompare(b, 'zh-CN'))]
+}
+
+function getStatsOrderScope({ userId, year, month, graduationYear } = {}) {
+  let filters = ' WHERE userId = @userId'
+  const params = { userId }
+  if (year) {
+    filters += ' AND createdAt >= @start AND createdAt < @end'
+    const startMonth = month || 1
+    const nextYear = !month || month === 12 ? year + 1 : year
+    const nextMonth = !month || month === 12 ? 1 : month + 1
+    params.start = `${year}-${String(startMonth).padStart(2, '0')}-01`
+    params.end = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`
+  }
+  if (graduationYear > 0) {
+    filters += ' AND graduationYear = @graduationYear'
+    params.graduationYear = graduationYear
+  }
+  return { filters, params }
+}
+
+function getStatsWeek(offset) {
+  // Order creation uses UTC, as do the year and month filters.
+  const start = new Date()
+  start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7 - offset * 7)
+  const sunday = new Date(start)
+  sunday.setUTCDate(start.getUTCDate() + 6)
+  const end = new Date(start)
+  end.setUTCDate(start.getUTCDate() + 7)
+  const dateKey = date => date.toISOString().slice(0, 10)
+  return {
+    weekStart: dateKey(start),
+    weekEnd: dateKey(end),
+    label: `${dateKey(start)} ~ ${dateKey(sunday)}`,
+  }
 }
 
 function registerIpcHandlers() {
@@ -1670,6 +1730,7 @@ function registerIpcHandlers() {
       DELETE FROM SyncAppliedEvents;
       DELETE FROM Settings;
     `)
+    applyNativeAppearance('light')
     return { success: true }
   })
 
@@ -1715,35 +1776,15 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('stats:getSummary', (_, params) => {
-    const { userId, year, month, graduationYear } = params || {}
-    let dateFilter = ''
-    const dateParams = { userId }
-    if (year && month) {
-      const m = String(month).padStart(2, '0')
-      const nextMonth = month === 12 ? 1 : month + 1
-      const nextYear = month === 12 ? year + 1 : year
-      const nm = String(nextMonth).padStart(2, '0')
-      dateFilter = ` AND createdAt >= @start AND createdAt < @end`
-      dateParams.start = `${year}-${m}-01`
-      dateParams.end = `${nextYear}-${nm}-01`
-    } else if (year) {
-      dateFilter = ` AND createdAt >= @start AND createdAt < @end`
-      dateParams.start = `${year}-01-01`
-      dateParams.end = `${year + 1}-01-01`
-    }
-    let gradFilter = ''
-    if (graduationYear && graduationYear > 0) {
-      gradFilter = ' AND graduationYear = @graduationYear'
-      dateParams.graduationYear = graduationYear
-    }
-    const w = ' WHERE userId = @userId' + dateFilter + gradFilter
+    const { year, month } = params || {}
+    const { filters: w, params: dateParams } = getStatsOrderScope(params)
 
     const totalOrders = db.prepare(`SELECT COUNT(*) as c FROM Orders${w}`).get(dateParams).c
 
     const byType = db.prepare(`
       SELECT orderType, COUNT(*) as count,
         SUM(totalAmount) as revenue,
-        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as dispatch,
+        SUM(CASE WHEN ${statsOutsourced} THEN dispatchAmount ELSE 0 END) as dispatch,
         SUM(refundAmount) as refund,
         SUM(paidAmount) as paid
       FROM Orders${w} GROUP BY orderType
@@ -1753,19 +1794,19 @@ function registerIpcHandlers() {
       SELECT
         SUM(totalAmount) as totalRevenue,
         SUM(paidAmount) as totalPaid,
-        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as totalDispatch,
+        SUM(CASE WHEN ${statsOutsourced} THEN dispatchAmount ELSE 0 END) as totalDispatch,
         SUM(refundAmount) as totalRefund
       FROM Orders${w}
     `).get(dateParams)
 
     const thesisBalance = db.prepare(`
       SELECT SUM(totalAmount - paidAmount) as balance
-      FROM Orders WHERE userId = @userId AND orderType = 'thesis' AND totalAmount > paidAmount${dateFilter}${gradFilter}
+      FROM Orders${w} AND orderType = 'thesis' AND totalAmount > paidAmount
     `).get(dateParams)
 
     const completedCount = db.prepare(`
       SELECT COUNT(*) as c FROM Orders
-      WHERE userId = @userId AND isDraftSubmitted = 1${dateFilter}${gradFilter}
+      ${w} AND isDraftSubmitted = 1
       AND id NOT IN (
         SELECT DISTINCT o.id FROM Orders o
         JOIN Revisions r ON r.orderId = o.id
@@ -1776,7 +1817,7 @@ function registerIpcHandlers() {
 
     const titleMissingCount = db.prepare(`
       SELECT COUNT(*) as c FROM Orders
-      WHERE userId = @userId AND TRIM(COALESCE(title, '')) = ''${dateFilter}${gradFilter}
+      ${w} AND TRIM(COALESCE(title, '')) = ''
     `).get(dateParams).c
 
     const handlerPayment = db.prepare(`
@@ -1784,26 +1825,24 @@ function registerIpcHandlers() {
         SUM(CASE WHEN handlerPaidAmount >= dispatchAmount AND dispatchAmount > 0 THEN 1 ELSE 0 END) as paidCount,
         SUM(CASE WHEN handlerPaidAmount < dispatchAmount AND dispatchAmount > 0 THEN 1 ELSE 0 END) as unpaidCount,
         SUM(CASE WHEN dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount
-      FROM Orders WHERE userId = @userId
-        AND TRIM(COALESCE(handler, '')) NOT IN ('', '本人')
-        AND dispatchAmount > 0${dateFilter}${gradFilter}
+      FROM Orders${w} AND ${statsOutsourced} AND dispatchAmount > 0
     `).get(dateParams)
 
     const byReceiver = db.prepare(`
-      SELECT CASE WHEN receiver = '' THEN '本人' ELSE receiver END as name,
+      SELECT ${statsReceiver} as name,
         COUNT(*) as count, SUM(totalAmount) as revenue
-      FROM Orders${w} GROUP BY name ORDER BY count DESC LIMIT 10
+      FROM Orders${w} GROUP BY name ORDER BY count DESC, name
     `).all(dateParams)
 
     const byHandler = db.prepare(`
-      SELECT CASE WHEN handler = '' THEN '本人' ELSE handler END as name,
+      SELECT ${statsHandler} as name,
         COUNT(*) as count, SUM(totalAmount) as revenue
-      FROM Orders${w} GROUP BY name ORDER BY count DESC LIMIT 10
+      FROM Orders${w} GROUP BY name ORDER BY count DESC, name
     `).all(dateParams)
 
     const byUniversity = db.prepare(`
       SELECT university as name, COUNT(*) as count, SUM(totalAmount) as revenue
-      FROM Orders WHERE userId = @userId AND university != ''${dateFilter}${gradFilter}
+      FROM Orders${w} AND university != ''
       GROUP BY university ORDER BY count DESC LIMIT 10
     `).all(dateParams)
 
@@ -1812,22 +1851,22 @@ function registerIpcHandlers() {
       monthlyTrend = db.prepare(`
         SELECT strftime('%d', createdAt) as day,
           COUNT(*) as count, SUM(totalAmount) as revenue
-        FROM Orders WHERE userId = @userId${dateFilter}${gradFilter}
+        FROM Orders${w}
         GROUP BY day ORDER BY day
       `).all(dateParams)
     } else if (year) {
       monthlyTrend = db.prepare(`
         SELECT strftime('%Y-%m', createdAt) as month,
           COUNT(*) as count, SUM(totalAmount) as revenue
-        FROM Orders WHERE userId = @userId${dateFilter}${gradFilter}
+        FROM Orders${w}
         GROUP BY month ORDER BY month
       `).all(dateParams)
     } else {
       monthlyTrend = db.prepare(`
         SELECT strftime('%Y-%m', createdAt) as month,
           COUNT(*) as count, SUM(totalAmount) as revenue
-        FROM Orders WHERE userId = @userId${gradFilter} GROUP BY month ORDER BY month DESC LIMIT 12
-      `).all(gradFilter ? dateParams : { userId }).reverse()
+        FROM Orders${w} GROUP BY month ORDER BY month DESC LIMIT 12
+      `).all(dateParams).reverse()
     }
 
     const byStatus = db.prepare(`
@@ -1855,125 +1894,112 @@ function registerIpcHandlers() {
       },
       byType,
       byStatus,
-      byReceiver,
-      byHandler,
+      byReceiver: byReceiver.slice(0, 10),
+      byHandler: byHandler.slice(0, 10),
+      receiverOptions: statsPersonOptions(byReceiver),
+      handlerOptions: statsPersonOptions(byHandler),
       byUniversity,
       monthlyTrend,
       trendMode: year && month ? 'daily' : 'monthly',
     }
   })
 
-  ipcMain.handle('stats:handlerDetail', (_, userId, handlerName, weekOffset, graduationYear) => {
-    const handler = String(handlerName || '').trim()
-    const offset = weekOffset || 0
-    const gradCond = (graduationYear && graduationYear > 0) ? ' AND graduationYear = @graduationYear' : ''
+  ipcMain.handle('stats:handlerDetail', (_, scope, handlerName, weekOffset = 0) => {
+    const handler = String(handlerName ?? '').trim() || '本人'
+    const selfHandled = handler === '本人'
+    const { filters, params } = getStatsOrderScope(scope)
+    const handlerFilter = `${filters} AND ${statsHandler} = @handler`
+    const handlerParams = { ...params, handler }
+    const { weekStart, weekEnd, label } = getStatsWeek(weekOffset)
+    const weekFilter = `${handlerFilter} AND createdAt >= @weekStart AND createdAt < @weekEnd`
+    const weekParams = { ...handlerParams, weekStart, weekEnd }
 
-    const allOrders = db.prepare(`
-      SELECT id, title, orderType, totalAmount, dispatchAmount, handlerPaidAmount,
-        CASE WHEN receiver = '' THEN '本人' ELSE receiver END as receiver, createdAt
-      FROM Orders WHERE userId = @userId AND handler = @handler
-        AND TRIM(COALESCE(handler, '')) NOT IN ('', '本人')${gradCond}
-      ORDER BY createdAt DESC
-    `).all({ userId, handler, graduationYear })
+    // Refunds reduce cash retained. The order's remaining balance uses gross collections.
+    const receiptColumns = selfHandled ? `,
+        COALESCE(paidAmount, 0) - COALESCE(refundAmount, 0) as netCollected,
+        MAX(COALESCE(totalAmount, 0) - COALESCE(paidAmount, 0), 0) as outstanding` : ''
+    const orders = (where, bindings) => db.prepare(`
+      SELECT id, title, orderType, totalAmount,
+        CASE WHEN @handler != '本人' THEN dispatchAmount ELSE 0 END as dispatchAmount,
+        CASE WHEN @handler != '本人' THEN handlerPaidAmount ELSE 0 END as handlerPaidAmount,
+        ${statsReceiver} as receiver, createdAt${receiptColumns}
+      FROM Orders${where} ORDER BY createdAt DESC
+    `).all(bindings)
 
-    const weekStart = new Date()
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1 - offset * 7)
-    weekStart.setHours(0, 0, 0, 0)
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekEnd.getDate() + 7)
+    const settlement = (where, bindings) => db.prepare(`
+      SELECT COUNT(*) as orderCount,
+        COALESCE(SUM(CASE WHEN @handler != '本人' THEN dispatchAmount END), 0) as totalDispatch,
+        COALESCE(SUM(CASE WHEN @handler != '本人' THEN handlerPaidAmount END), 0) as paidAmount,
+        COALESCE(SUM(CASE WHEN @handler != '本人' AND dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount END), 0) as unpaidAmount,
+        COUNT(CASE WHEN @handler != '本人' AND dispatchAmount > 0 AND handlerPaidAmount >= dispatchAmount THEN 1 END) as paidCount,
+        COUNT(CASE WHEN @handler != '本人' AND dispatchAmount > 0 AND handlerPaidAmount < dispatchAmount THEN 1 END) as unpaidCount
+      FROM Orders${where}
+    `).get(bindings)
 
-    const weekOrders = db.prepare(`
-      SELECT id, title, orderType, totalAmount, dispatchAmount, handlerPaidAmount,
-        CASE WHEN receiver = '' THEN '本人' ELSE receiver END as receiver, createdAt
-      FROM Orders
-      WHERE userId = @userId AND handler = @handler
-        AND TRIM(COALESCE(handler, '')) NOT IN ('', '本人')${gradCond}
-      AND createdAt >= @start AND createdAt < @end
-      ORDER BY createdAt DESC
-    `).all({ userId, handler, graduationYear, start: weekStart.toISOString(), end: weekEnd.toISOString() })
-
-    const totalStats = db.prepare(`
-      SELECT
-        COUNT(*) as orderCount,
-        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as totalDispatch,
-        SUM(handlerPaidAmount) as paidAmount,
-        SUM(CASE WHEN dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount,
-        SUM(CASE WHEN handlerPaidAmount >= dispatchAmount AND dispatchAmount > 0 THEN 1 ELSE 0 END) as paidCount,
-        SUM(CASE WHEN handlerPaidAmount < dispatchAmount AND dispatchAmount > 0 THEN 1 ELSE 0 END) as unpaidCount
-      FROM Orders WHERE userId = @userId AND handler = @handler
-        AND TRIM(COALESCE(handler, '')) NOT IN ('', '本人')${gradCond}
-    `).get({ userId, handler, graduationYear })
-
-    const weekStats = db.prepare(`
-      SELECT
-        COUNT(*) as orderCount,
-        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as totalDispatch,
-        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN handlerPaidAmount ELSE 0 END) as paidAmount,
-        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') AND dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount
-      FROM Orders
-      WHERE userId = @userId AND handler = @handler
-        AND TRIM(COALESCE(handler, '')) NOT IN ('', '本人')${gradCond}
-      AND createdAt >= @start AND createdAt < @end
-    `).get({ userId, handler, graduationYear, start: weekStart.toISOString(), end: weekEnd.toISOString() })
-
-    const weekLabel = `${weekStart.getFullYear()}-${String(weekStart.getMonth()+1).padStart(2,'0')}-${String(weekStart.getDate()).padStart(2,'0')} ~ ${weekEnd.getFullYear()}-${String(weekEnd.getMonth()+1).padStart(2,'0')}-${String(weekEnd.getDate()-1).padStart(2,'0')}`
+    const summarizeReceipts = rows => rows.reduce((summary, order) => {
+      summary.totalAmount += order.totalAmount ?? 0
+      summary.netCollected += order.netCollected
+      summary.outstanding += order.outstanding
+      return summary
+    }, { totalAmount: 0, netCollected: 0, outstanding: 0 })
+    const allOrders = orders(handlerFilter, handlerParams)
+    const weekOrders = orders(weekFilter, weekParams)
+    const total = settlement(handlerFilter, handlerParams)
+    const weekTotal = settlement(weekFilter, weekParams)
+    if (selfHandled) {
+      total.receipts = summarizeReceipts(allOrders)
+      weekTotal.receipts = summarizeReceipts(weekOrders)
+    }
 
     return {
+      selfHandled,
       allOrders,
-      total: {
-        orderCount: totalStats.orderCount || 0,
-        totalDispatch: totalStats.totalDispatch || 0,
-        paidAmount: totalStats.paidAmount || 0,
-        unpaidAmount: totalStats.unpaidAmount || 0,
-        paidCount: totalStats.paidCount || 0,
-        unpaidCount: totalStats.unpaidCount || 0,
-      },
+      total,
       week: {
-        label: weekLabel,
-        orderCount: weekStats.orderCount || 0,
-        totalDispatch: weekStats.totalDispatch || 0,
-        paidAmount: weekStats.paidAmount || 0,
-        unpaidAmount: weekStats.unpaidAmount || 0,
+        label,
+        ...weekTotal,
         orders: weekOrders,
       },
     }
   })
 
-  ipcMain.handle('stats:receiverDetail', (_, userId, receiverName, graduationYear) => {
-    const receiver = receiverName === '本人' ? '' : receiverName
-    const gradCond = (graduationYear && graduationYear > 0) ? ' AND graduationYear = @graduationYear' : ''
+  ipcMain.handle('stats:receiverDetail', (_, scope, receiverName) => {
+    const receiver = String(receiverName ?? '').trim() || '本人'
+    const { filters, params } = getStatsOrderScope(scope)
+    const receiverFilter = `${filters} AND ${statsReceiver} = @receiver`
+    const receiverParams = { ...params, receiver }
 
     const allOrders = db.prepare(`
       SELECT id, title, orderType, totalAmount, paidAmount,
-        CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END as dispatchAmount,
-        CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN handlerPaidAmount ELSE 0 END as handlerPaidAmount,
-        CASE WHEN TRIM(COALESCE(handler, '')) IN ('', '本人') THEN '本人' ELSE handler END as handler, createdAt
-      FROM Orders WHERE userId = @userId AND (receiver = @receiver OR (@receiver = '' AND receiver = ''))${gradCond}
+        CASE WHEN ${statsOutsourced} THEN dispatchAmount ELSE 0 END as dispatchAmount,
+        CASE WHEN ${statsOutsourced} THEN handlerPaidAmount ELSE 0 END as handlerPaidAmount,
+        ${statsHandler} as handler, createdAt
+      FROM Orders${receiverFilter}
       ORDER BY createdAt DESC
-    `).all({ userId, receiver, graduationYear })
+    `).all(receiverParams)
 
     const totalStats = db.prepare(`
       SELECT
         COUNT(*) as orderCount,
         SUM(totalAmount) as totalAmount,
-        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as totalDispatch,
+        SUM(CASE WHEN ${statsOutsourced} THEN dispatchAmount ELSE 0 END) as totalDispatch,
         SUM(paidAmount) as paidAmount,
         SUM(CASE WHEN totalAmount > paidAmount THEN totalAmount - paidAmount ELSE 0 END) as unpaidAmount,
         SUM(CASE WHEN totalAmount > 0 AND paidAmount >= totalAmount THEN 1 ELSE 0 END) as paidCount,
         SUM(CASE WHEN totalAmount > 0 AND paidAmount < totalAmount THEN 1 ELSE 0 END) as unpaidCount
-      FROM Orders WHERE userId = @userId AND (receiver = @receiver OR (@receiver = '' AND receiver = ''))${gradCond}
-    `).get({ userId, receiver, graduationYear })
+      FROM Orders${receiverFilter}
+    `).get(receiverParams)
 
     const byHandler = db.prepare(`
       SELECT
-        CASE WHEN TRIM(COALESCE(handler, '')) IN ('', '本人') THEN '本人' ELSE handler END as name,
+        ${statsHandler} as name,
         COUNT(*) as orderCount,
-        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN dispatchAmount ELSE 0 END) as totalDispatch,
-        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') THEN handlerPaidAmount ELSE 0 END) as paidAmount,
-        SUM(CASE WHEN TRIM(COALESCE(handler, '')) NOT IN ('', '本人') AND dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount
-      FROM Orders WHERE userId = @userId AND (receiver = @receiver OR (@receiver = '' AND receiver = ''))${gradCond}
+        SUM(CASE WHEN ${statsOutsourced} THEN dispatchAmount ELSE 0 END) as totalDispatch,
+        SUM(CASE WHEN ${statsOutsourced} THEN handlerPaidAmount ELSE 0 END) as paidAmount,
+        SUM(CASE WHEN ${statsOutsourced} AND dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount
+      FROM Orders${receiverFilter}
       GROUP BY name ORDER BY orderCount DESC
-    `).all({ userId, receiver, graduationYear })
+    `).all(receiverParams)
 
     return {
       allOrders,
@@ -1997,7 +2023,9 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('settings:set', (_, key, value) => {
-    db.prepare('INSERT OR REPLACE INTO Settings (key, value) VALUES (?, ?)').run(key, value)
+    if (key === 'appearanceMode' && value !== 'light' && value !== 'dark') return false
+    setSettingValue(key, value)
+    if (key === 'appearanceMode') applyNativeAppearance(value)
     return true
   })
 

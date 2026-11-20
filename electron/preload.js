@@ -22,8 +22,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Stats
   getStats: (params) => ipcRenderer.invoke('stats:getSummary', params),
   getStatsYears: (userId) => ipcRenderer.invoke('stats:getYears', userId),
-  getHandlerDetail: (userId, handler, weekOffset, graduationYear) => ipcRenderer.invoke('stats:handlerDetail', userId, handler, weekOffset, graduationYear),
-  getReceiverDetail: (userId, receiver, graduationYear) => ipcRenderer.invoke('stats:receiverDetail', userId, receiver, graduationYear),
+  getHandlerDetail: (scope, handler, weekOffset) => ipcRenderer.invoke('stats:handlerDetail', scope, handler, weekOffset),
+  getReceiverDetail: (scope, receiver) => ipcRenderer.invoke('stats:receiverDetail', scope, receiver),
 
   // Settings
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),

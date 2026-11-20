@@ -224,13 +224,26 @@ async function handleRegister() {
 
 <style scoped>
 .login-wrapper {
+  --login-heading: light-dark(var(--gt-text-main), #ffffff);
+  --login-text: var(--gt-text-body);
+  --login-muted: var(--gt-text-muted);
+  --login-field: light-dark(#f8fafc, rgba(255, 255, 255, 0.06));
+  --login-field-border: light-dark(#cbd5e1, rgba(255, 255, 255, 0.14));
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 40%, #312e81 70%, #1e293b 100%);
+  background: linear-gradient(135deg,
+    light-dark(#f8fafc, var(--gt-shell-bg)) 0%,
+    light-dark(#eef2ff, var(--gt-shell-bg)) 40%,
+    light-dark(#e0e7ff, var(--gt-surface-subtle)) 70%,
+    light-dark(#f1f5f9, var(--gt-surface-subtle)) 100%);
   overflow: hidden;
+}
+
+:global(html.dark .login-wrapper .bg-orb) {
+  display: none;
 }
 
 .login-drag-region {
@@ -256,7 +269,7 @@ async function handleRegister() {
   height: 100%;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--login-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -264,8 +277,8 @@ async function handleRegister() {
   transition: background 0.12s, color 0.12s;
 }
 .login-win-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.85);
+  background: light-dark(rgba(15, 23, 42, 0.08), rgba(255, 255, 255, 0.1));
+  color: var(--login-heading);
 }
 .login-win-close:hover {
   background: #e81123;
@@ -321,12 +334,12 @@ async function handleRegister() {
   position: relative;
   width: 400px;
   padding: 40px 36px 32px;
-  background: rgba(255, 255, 255, 0.07);
+  background: light-dark(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.07));
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid light-dark(#dbe4fa, rgba(255, 255, 255, 0.12));
   border-radius: 24px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 80px light-dark(rgba(49, 46, 129, 0.14), rgba(0, 0, 0, 0.4)), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   z-index: 1;
 }
 
@@ -348,12 +361,12 @@ async function handleRegister() {
 .brand-name {
   font-size: 22px;
   font-weight: 700;
-  color: #fff;
+  color: var(--login-heading);
   letter-spacing: 1px;
 }
 .brand-sub {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--login-text);
   margin-top: 6px;
 }
 
@@ -368,7 +381,7 @@ async function handleRegister() {
   display: block;
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--login-text);
   margin-bottom: 6px;
 }
 
@@ -380,19 +393,19 @@ async function handleRegister() {
   min-height: 46px;
   padding: 0 14px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--login-field);
+  border: 1px solid var(--login-field-border);
 }
 
 .unlock-account-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.48);
+  color: var(--login-text);
 }
 
 .unlock-account strong {
   min-width: 0;
   font-size: 14px;
-  color: #fff;
+  color: var(--login-heading);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -402,8 +415,8 @@ async function handleRegister() {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--login-field);
+  border: 1px solid var(--login-field-border);
   border-radius: 12px;
   padding: 0 14px;
   height: 46px;
@@ -415,7 +428,7 @@ async function handleRegister() {
 }
 
 .field-icon {
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--login-muted);
   flex-shrink: 0;
 }
 
@@ -424,25 +437,25 @@ async function handleRegister() {
   background: none;
   border: none;
   outline: none;
-  color: #fff;
+  color: var(--login-heading);
   font-size: 14px;
   font-family: inherit;
 }
 .input-wrap input::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--login-muted);
 }
 
 .eye-btn {
   background: none;
   border: none;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--login-muted);
   padding: 2px;
   display: flex;
   transition: color 0.15s;
 }
 .eye-btn:hover {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--login-text);
 }
 
 /* Remember */
@@ -451,7 +464,7 @@ async function handleRegister() {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--login-text);
   cursor: pointer;
   user-select: none;
 }
@@ -471,7 +484,7 @@ async function handleRegister() {
   height: 46px;
   border: none;
   border-radius: 12px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: linear-gradient(135deg, #4338ca, #6d28d9);
   color: #fff;
   font-size: 15px;
   font-weight: 600;
@@ -507,7 +520,7 @@ async function handleRegister() {
 /* Error */
 .error-msg {
   text-align: center;
-  color: #f87171;
+  color: light-dark(#b91c1c, #fecaca);
   font-size: 13px;
   margin: -4px 0 0;
 }
@@ -516,15 +529,15 @@ async function handleRegister() {
 .switch-link {
   text-align: center;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--login-muted);
 }
 .switch-link a {
-  color: #818cf8;
+  color: light-dark(#4338ca, #c7d2fe);
   cursor: pointer;
   font-weight: 500;
   transition: color 0.15s;
 }
 .switch-link a:hover {
-  color: #a5b4fc;
+  color: light-dark(#312e81, #e0e7ff);
 }
 </style>

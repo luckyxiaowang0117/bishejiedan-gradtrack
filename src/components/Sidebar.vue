@@ -22,206 +22,194 @@
       />
     </div>
 
-    <div class="filter-panel">
-      <div class="grad-seg">
-        <button
-          v-for="y in graduationYears"
-          :key="y"
-          class="grad-seg-btn"
-          :class="{ 'grad-seg-active': graduationYearFilter === y }"
-          @click="$emit('graduation-year-change', y)"
-        >{{ y }}届<span v-if="y === currentGradYear" class="grad-current-tag">当前</span></button>
-        <button
-          class="grad-seg-btn"
-          :class="{ 'grad-seg-active': graduationYearFilter === 'all' }"
-          @click="$emit('graduation-year-change', 'all')"
-        >全部届</button>
-      </div>
-
-      <div class="type-seg">
-        <button
-          class="type-seg-btn type-seg-btn-all"
-          :class="{ 'type-seg-active': typeFilter === allTypeFilter.key }"
-          :style="getTypeButtonStyle(allTypeFilter)"
-          @click="$emit('type-change', allTypeFilter.key)"
-        >{{ allTypeFilter.label }}</button>
-        <div class="type-seg-grid">
+    <div class="filter-panel" @keydown.esc="showAdvancedFilters = false">
+      <div class="quick-filters">
+        <div class="graduation-filters" role="group" aria-label="毕业届">
           <button
-            v-for="t in businessTypeFilters"
-            :key="t.key"
-            class="type-seg-btn type-seg-btn-business"
-            :class="['type-key-' + t.key, { 'type-seg-active': typeFilter === t.key }]"
-            :style="getTypeButtonStyle(t)"
-            @click="$emit('type-change', t.key)"
-          >{{ t.label }}</button>
+            v-for="year in graduationYears"
+            :key="year"
+            type="button"
+            class="graduation-filter"
+            :aria-pressed="graduationYearFilter === year"
+            @click="$emit('graduation-year-change', year)"
+          >
+            {{ year }}届
+            <span v-if="year === currentGradYear" class="current-year-label">当前</span>
+          </button>
+          <button
+            type="button"
+            class="graduation-filter"
+            :aria-pressed="graduationYearFilter === 'all'"
+            @click="$emit('graduation-year-change', 'all')"
+          >全部届</button>
+        </div>
+
+        <div class="type-filters" role="group" aria-label="业务类型">
+          <button
+            type="button"
+            class="type-filter-all"
+            :aria-pressed="typeFilter === 'all'"
+            @click="$emit('type-change', 'all')"
+          >全部类型</button>
+          <div class="type-filter-grid">
+            <button
+              v-for="(type, key) in orderTypeMap"
+              :key="key"
+              type="button"
+              class="type-filter"
+              :style="{ '--type-color': type.color }"
+              :aria-pressed="typeFilter === key"
+              @click="$emit('type-change', key)"
+            >{{ type.label }}</button>
+          </div>
         </div>
       </div>
 
-      <div class="filter-body">
+      <div class="filter-controls">
         <button
+          type="button"
           class="advanced-toggle"
-          :class="{ 'advanced-toggle-active': showAdvancedFilters || hasAdvancedFiltersActive }"
+          :class="{ 'advanced-toggle-active': showAdvancedFilters || advancedFilterCount > 0 }"
+          :aria-expanded="showAdvancedFilters"
+          aria-controls="sidebar-advanced-filters"
           @click="showAdvancedFilters = !showAdvancedFilters"
         >
-          <span class="advanced-toggle-left">
-            <el-icon :size="14"><Operation /></el-icon>
-            <span class="advanced-toggle-text">学校 / 专业 / 接单人 / 处理人</span>
-          </span>
-          <span class="advanced-toggle-right">
-            <span v-if="hasAdvancedFiltersActive" class="advanced-toggle-badge">已启用</span>
-            <el-icon :size="14" class="advanced-toggle-arrow">
-              <ArrowUp v-if="showAdvancedFilters" />
-              <ArrowDown v-else />
-            </el-icon>
-          </span>
+          <el-icon><Operation /></el-icon>
+          <span class="advanced-toggle-label">精细筛选</span>
+          <span v-if="advancedFilterCount" class="advanced-toggle-badge">{{ advancedFilterCount }}</span>
+          <el-icon><ArrowUp v-if="showAdvancedFilters" /><ArrowDown v-else /></el-icon>
         </button>
 
-        <div v-show="showAdvancedFilters" class="cascade-shell">
-          <div class="cascade-shell-head">
-            <span class="cascade-shell-title">精细筛选</span>
-            <span class="cascade-shell-sub">按学校、专业与协作角色快速定位</span>
-          </div>
+        <div v-show="showAdvancedFilters" id="sidebar-advanced-filters" class="cascade-shell">
           <div class="cascade-grid">
-            <div class="filter-field filter-field-university">
-              <div class="filter-field-label">
-                <el-icon :size="13"><OfficeBuilding /></el-icon>
-                <span>学校</span>
-              </div>
+            <div class="filter-field">
+              <span>学校</span>
               <el-select
                 :model-value="universityFilter"
-                @update:model-value="$emit('university-change', $event)"
+                aria-label="学校"
                 placeholder="全部学校"
-                clearable
                 size="small"
-                class="cascade-select"
+                filterable
+                @update:model-value="$emit('university-change', $event)"
               >
                 <el-option label="全部学校" value="all" />
-                <el-option v-for="u in universities" :key="u" :label="u" :value="u" />
+                <el-option v-for="item in universities" :key="item" :label="item" :value="item" />
               </el-select>
             </div>
-
-            <div class="filter-field filter-field-major">
-              <div class="filter-field-label">
-                <el-icon :size="13"><CollectionTag /></el-icon>
-                <span>专业</span>
-              </div>
+            <div class="filter-field">
+              <span>专业</span>
               <el-select
                 :model-value="majorFilter"
-                @update:model-value="$emit('major-change', $event)"
+                aria-label="专业"
                 placeholder="全部专业"
-                clearable
                 size="small"
-                class="cascade-select"
+                filterable
+                @update:model-value="$emit('major-change', $event)"
               >
                 <el-option label="全部专业" value="all" />
-                <el-option v-for="m in majors" :key="m" :label="m" :value="m" />
+                <el-option v-for="item in majors" :key="item" :label="item" :value="item" />
               </el-select>
             </div>
-
-            <div class="filter-field filter-field-receiver">
-              <div class="filter-field-label">
-                <el-icon :size="13"><User /></el-icon>
-                <span>接单人</span>
-              </div>
+            <div class="filter-field">
+              <span>接单人</span>
               <el-select
                 :model-value="receiverFilter"
-                @update:model-value="$emit('receiver-change', $event)"
+                aria-label="接单人"
                 placeholder="全部接单人"
-                clearable
                 size="small"
-                class="cascade-select"
+                filterable
+                @update:model-value="$emit('receiver-change', $event)"
               >
                 <el-option label="全部接单人" value="all" />
-                <el-option v-for="r in receivers" :key="r" :label="r" :value="r" />
+                <el-option v-for="item in receivers" :key="item" :label="item" :value="item" />
               </el-select>
             </div>
-
-            <div class="filter-field filter-field-handler">
-              <div class="filter-field-label">
-                <el-icon :size="13"><SetUp /></el-icon>
-                <span>处理人</span>
-              </div>
+            <div class="filter-field">
+              <span>处理人</span>
               <el-select
                 :model-value="handlerFilter"
-                @update:model-value="$emit('handler-change', $event)"
+                aria-label="处理人"
                 placeholder="全部处理人"
-                clearable
                 size="small"
-                class="cascade-select"
+                filterable
+                @update:model-value="$emit('handler-change', $event)"
               >
                 <el-option label="全部处理人" value="all" />
-                <el-option v-for="h in handlers" :key="h" :label="h" :value="h" />
+                <el-option v-for="item in handlers" :key="item" :label="item" :value="item" />
               </el-select>
             </div>
           </div>
+
+          <el-checkbox
+            class="title-missing-filter"
+            :model-value="titleMissingOnly"
+            @update:model-value="$emit('title-missing-change', $event)"
+          >仅看待补充题目</el-checkbox>
         </div>
+      </div>
 
-        <div class="status-row">
-          <button
-            v-for="f in filters"
-            :key="f.key"
-            class="filter-pill"
-            :class="[filter === f.key ? f.activeClass : 'pill-default', 'pill-key-' + f.key]"
-            @click="$emit('filter-change', f.key)"
-          >
-            {{ f.label }}
-            <span
-              v-if="f.countKey && badgeCounts && badgeCounts[f.countKey] > 0"
-              class="pill-count"
-              :class="{ 'pill-count-active': filter === f.key }"
-            >{{ badgeCounts[f.countKey] }}</span>
-          </button>
-        </div>
+      <div class="status-row" aria-label="订单状态">
+        <button
+          v-for="f in filters"
+          :key="f.key"
+          type="button"
+          class="filter-pill"
+          :class="[filter === f.key ? f.activeClass : 'pill-default', 'pill-key-' + f.key]"
+          :aria-pressed="filter === f.key"
+          @click="$emit('filter-change', f.key)"
+        >
+          {{ f.label }}
+          <span v-if="f.countKey && badgeCounts?.[f.countKey] > 0" class="pill-count">
+            {{ badgeCounts[f.countKey] }}
+          </span>
+        </button>
+      </div>
 
-        <el-checkbox
-          class="title-missing-filter"
-          :model-value="titleMissingOnly"
-          @update:model-value="$emit('title-missing-change', $event)"
-        >仅看待补充题目订单</el-checkbox>
-
+      <div class="result-toolbar">
+        <span class="result-count">{{ totalVisibleOrders }} 单</span>
         <div class="list-organizer">
-          <div class="organizer-field">
-            <span class="organizer-label">排序</span>
-            <el-select
-              :model-value="sortMode"
-              @update:model-value="$emit('sort-change', $event)"
-              size="small"
-              class="organizer-select"
-            >
-              <el-option v-for="item in sortOptions" :key="item.key" :label="item.label" :value="item.key" />
-            </el-select>
-          </div>
-
-          <div class="organizer-field">
-            <span class="organizer-label">分组</span>
-            <el-select
-              :model-value="groupMode"
-              @update:model-value="$emit('group-change', $event)"
-              size="small"
-              class="organizer-select"
-            >
-              <el-option v-for="item in groupOptions" :key="item.key" :label="item.label" :value="item.key" />
-            </el-select>
-          </div>
-        </div>
-
-        <div class="reset-row">
-          <div class="result-meta">
-            <span class="result-count">{{ totalVisibleOrders }}</span>
-            <span class="result-label">个项目</span>
-          </div>
-          <el-button
-            v-if="hasActiveFilters"
-            text
+          <el-select
+            :model-value="sortMode"
+            aria-label="排序"
+            :title="'排序 · ' + (sortOptions.find(item => item.key === sortMode)?.label || '')"
             size="small"
-            type="danger"
-            class="reset-filters-btn"
-            @click="$emit('reset-filters')"
+            @update:model-value="$emit('sort-change', $event)"
           >
-            <el-icon><RefreshLeft /></el-icon>
-            重置筛选
-          </el-button>
+            <template #prefix><el-icon><Sort /></el-icon></template>
+            <el-option v-for="item in sortOptions" :key="item.key" :label="item.label" :value="item.key" />
+          </el-select>
+
+          <el-select
+            :model-value="groupMode"
+            aria-label="分组"
+            :title="'分组 · ' + (groupOptions.find(item => item.key === groupMode)?.label || '')"
+            size="small"
+            @update:model-value="$emit('group-change', $event)"
+          >
+            <template #prefix><el-icon><Grid /></el-icon></template>
+            <el-option v-for="item in groupOptions" :key="item.key" :label="item.label" :value="item.key" />
+          </el-select>
         </div>
+        <button
+          v-if="groupMode !== 'none' && orderGroups.length > 0"
+          type="button"
+          class="toolbar-action"
+          :aria-label="isAllGroupsExpanded ? '全部收起' : '全部展开'"
+          :title="isAllGroupsExpanded ? '全部收起' : '全部展开'"
+          @click="toggleAllGroups"
+        >
+          <el-icon><DArrowLeft v-if="isAllGroupsExpanded" /><DArrowRight v-else /></el-icon>
+        </button>
+        <button
+          v-if="hasActiveFilters"
+          type="button"
+          class="toolbar-action reset-filters-btn"
+          aria-label="重置筛选"
+          title="重置筛选"
+          @click="$emit('reset-filters')"
+        >
+          <el-icon><RefreshLeft /></el-icon>
+        </button>
       </div>
     </div>
 
@@ -232,12 +220,10 @@
             v-if="groupMode !== 'none'"
             type="button"
             class="order-group-head"
+            :aria-expanded="isGroupExpanded(group.key)"
             @click="toggleGroup(group.key)"
           >
-            <div class="order-group-copy">
-              <div class="order-group-title">{{ group.label }}</div>
-              <div v-if="group.description" class="order-group-sub">{{ group.description }}</div>
-            </div>
+            <span class="order-group-title" :title="group.label">{{ group.label }}</span>
             <div class="order-group-right">
               <div class="order-group-count">{{ group.orders.length }}</div>
               <el-icon class="order-group-arrow" :class="{ 'order-group-arrow-open': isGroupExpanded(group.key) }">
@@ -251,46 +237,59 @@
               v-for="order in group.orders"
               :key="order.id"
               class="order-card"
+              role="button"
+              tabindex="0"
               :class="[
                 { active: order.id === selectedOrderId },
                 'card-urgency-' + getStatus(order).overall,
               ]"
               @click="$emit('select', order.id)"
+              @keydown.enter="$emit('select', order.id)"
+              @keydown.space.prevent="$emit('select', order.id)"
             >
               <div class="card-top">
-                <h3 class="card-title">{{ order.title || '待客户确认题目' }}</h3>
+                <h3 class="card-title" :title="order.title || '待客户确认题目'">{{ order.title || '待客户确认题目' }}</h3>
                 <span
                   class="type-badge"
-                  :style="{ color: (orderTypeMap[order.orderType || 'thesis'] || {}).color, background: (orderTypeMap[order.orderType || 'thesis'] || {}).color + '14' }"
-                >{{ (orderTypeMap[order.orderType || 'thesis'] || {}).label }}</span>
+                  :style="{ color: (orderTypeMap[order.orderType] || orderTypeMap.thesis).color, background: `color-mix(in srgb, ${(orderTypeMap[order.orderType] || orderTypeMap.thesis).color} 8%, var(--gt-surface))` }"
+                >{{ (orderTypeMap[order.orderType] || orderTypeMap.thesis).label }}</span>
               </div>
-              <div v-if="order.orderCode" class="card-order-code">{{ order.orderCode }}</div>
-
-              <div v-if="order.packageTier" class="card-package" :class="'package-' + getPackageMeta(order.packageTier).key">
-                <span class="card-package-icon">{{ getPackageMeta(order.packageTier).icon }}</span>
-                <span class="card-package-code">{{ getPackageMeta(order.packageTier).code }}</span>
-                <strong>{{ getPackageMeta(order.packageTier).label }}</strong>
+              <div
+                v-if="order.orderCode || order.packageTier || order.orderType === 'special'"
+                class="card-identity"
+              >
+                <span v-if="order.orderCode" class="card-order-code" :title="order.orderCode">{{ order.orderCode }}</span>
+                <span v-if="order.packageTier" class="card-package" :class="'package-' + getPackageMeta(order.packageTier).key">
+                  <strong>{{ getPackageMeta(order.packageTier).code }}</strong> · {{ getPackageMeta(order.packageTier).label }}
+                </span>
+                <span
+                  v-if="order.orderType === 'special'"
+                  class="card-special-service"
+                  :title="order.specialService || '服务未填写'"
+                >服务项目 {{ order.specialService || '未填写' }}</span>
               </div>
 
-              <div v-if="(order.orderType || 'thesis') === 'special'" class="card-special-service">
-                <span class="card-special-label">服务项目:</span>
-                <span class="card-special-value">{{ order.specialService || '未填写' }}</span>
-              </div>
-
-              <div v-if="order.university" class="card-school">
-                <el-icon :size="12"><OfficeBuilding /></el-icon>
-                {{ order.university }}<span v-if="order.major"> · {{ order.major }}</span>
+              <div v-if="order.university || order.major" class="card-school" :title="[order.university, order.major].filter(Boolean).join(' · ')">
+                <span class="card-school-badge">
+                  <el-icon><OfficeBuilding /></el-icon>
+                  <span>{{ [order.university, order.major].filter(Boolean).join(' · ') }}</span>
+                </span>
               </div>
 
               <div class="card-people">
-                <span><el-icon :size="12"><User /></el-icon> 接单人: {{ order.receiver || '本人' }}</span>
-                <span><el-icon :size="12"><SetUp /></el-icon> 处理人: {{ order.handler || '本人' }}</span>
+                <span :title="'接单人 ' + (order.receiver || '本人')">
+                  <el-icon><User /></el-icon>
+                  <span>接单人 {{ order.receiver || '本人' }}</span>
+                </span>
+                <span :title="'处理人 ' + (order.handler || '本人')">
+                  <el-icon><SetUp /></el-icon>
+                  <span>处理人 {{ order.handler || '本人' }}</span>
+                </span>
               </div>
 
-              <div v-if="order.groupChatName" class="card-group-chat">
-                <el-icon :size="12"><ChatDotRound /></el-icon>
-                <span class="card-group-chat-label">群聊名称:</span>
-                <span class="card-group-chat-value">{{ order.groupChatName }}</span>
+              <div v-if="order.groupChatName?.trim()" class="card-group-chat" :title="order.groupChatName">
+                <el-icon><ChatDotRound /></el-icon>
+                <span>群聊名称 {{ order.groupChatName }}</span>
               </div>
 
               <div class="card-bottom">
@@ -347,37 +346,35 @@
       </template>
 
       <div v-else class="empty-list">
-        <el-icon :size="36" color="#cbd5e1"><Filter /></el-icon>
+        <el-icon :size="36" color="var(--gt-border-strong)"><Filter /></el-icon>
         <p>没有找到相关单子</p>
         <span class="empty-list-sub">可以尝试切换排序、分组或筛选条件</span>
       </div>
     </div>
 
     <div class="sidebar-foot">
-      <div class="foot-row foot-row-primary">
-        <el-button type="primary" size="large" class="create-btn" @click="$emit('create')">
-          <el-icon><CirclePlusFilled /></el-icon>
-          新建接单项目
-        </el-button>
-      </div>
-      <div class="foot-row foot-row-secondary">
+      <el-button type="primary" size="large" class="create-btn" @click="$emit('create')">
+        <el-icon><CirclePlusFilled /></el-icon>
+        新建接单项目
+      </el-button>
+      <div class="sidebar-utilities">
         <el-tooltip content="立即同步" placement="top">
-          <el-button size="large" class="settings-btn sync-btn" :loading="syncBusy" @click="$emit('open-sync')">
+          <el-button size="large" aria-label="立即同步" class="settings-btn sync-btn" :loading="syncBusy" @click="$emit('open-sync')">
             <el-icon :size="18"><RefreshRight /></el-icon>
           </el-button>
         </el-tooltip>
         <el-tooltip content="数据统计" placement="top">
-          <el-button size="large" class="settings-btn" @click="$emit('open-stats')">
+          <el-button size="large" aria-label="数据统计" class="settings-btn" @click="$emit('open-stats')">
             <el-icon :size="18"><DataLine /></el-icon>
           </el-button>
         </el-tooltip>
         <el-tooltip content="设置" placement="top">
-          <el-button size="large" class="settings-btn" @click="$emit('open-settings')">
+          <el-button size="large" aria-label="设置" class="settings-btn" @click="$emit('open-settings')">
             <el-icon :size="18"><Setting /></el-icon>
           </el-button>
         </el-tooltip>
         <el-tooltip content="退出登录" placement="top">
-          <el-button size="large" class="settings-btn logout-btn" @click="$emit('logout')">
+          <el-button size="large" aria-label="退出登录" class="settings-btn logout-btn" @click="$emit('logout')">
             <el-icon :size="18"><SwitchButton /></el-icon>
           </el-button>
         </el-tooltip>
@@ -388,6 +385,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { orderTypeMeta as orderTypeMap } from '../orderTypeMeta.js'
 
 const props = defineProps({
   appVersion: String,
@@ -460,14 +458,30 @@ watch(() => props.groupMode, (mode) => {
   if (mode === 'none') {
     expandedGroupKeys.value = []
   } else {
-    expandedGroupKeys.value = []
+    expandedGroupKeys.value = props.orderGroups.map(group => group.key)
   }
 }, { immediate: true })
 
-watch(() => props.orderGroups, (groups) => {
-  const validKeys = new Set(groups.map(group => group.key))
-  expandedGroupKeys.value = expandedGroupKeys.value.filter(key => validKeys.has(key))
-}, { deep: true })
+watch(() => props.orderGroups, (groups, previous) => {
+  if (props.groupMode === 'none') return
+  const previouslyVisible = new Set(previous.map(group => group.key))
+  expandedGroupKeys.value = groups
+    .filter(group => !previouslyVisible.has(group.key) || expandedGroupKeys.value.includes(group.key))
+    .map(group => group.key)
+})
+
+const isAllGroupsExpanded = computed(() => {
+  if (props.groupMode === 'none' || props.orderGroups.length === 0) return false
+  return props.orderGroups.every(g => expandedGroupKeys.value.includes(g.key))
+})
+
+function toggleAllGroups() {
+  if (isAllGroupsExpanded.value) {
+    expandedGroupKeys.value = []
+  } else {
+    expandedGroupKeys.value = props.orderGroups.map(g => g.key)
+  }
+}
 
 const flatOrderCount = computed(() =>
   props.orderGroups.reduce((sum, group) => sum + group.orders.length, 0)
@@ -484,11 +498,9 @@ const hasActiveFilters = computed(() =>
   (props.search && props.search.trim() !== '')
 )
 
-const hasAdvancedFiltersActive = computed(() =>
-  props.universityFilter !== 'all' ||
-  props.majorFilter !== 'all' ||
-  props.receiverFilter !== 'all' ||
-  props.handlerFilter !== 'all'
+const advancedFilterCount = computed(() =>
+  [props.universityFilter, props.majorFilter, props.receiverFilter, props.handlerFilter]
+    .filter(value => value && value !== 'all').length + Number(!!props.titleMissingOnly)
 )
 
 const filters = [
@@ -496,35 +508,13 @@ const filters = [
   { key: 'draft', label: '待提交初稿', activeClass: 'pill-draft', countKey: 'draft' },
   { key: 'todo', label: '待修改', activeClass: 'pill-todo', countKey: 'todo' },
   { key: 'unpaid', label: '欠尾款', activeClass: 'pill-unpaid', countKey: 'unpaid' },
-  { key: 'idle', label: '🎉已完成🎉', activeClass: 'pill-idle', countKey: 'idle' },
+  { key: 'idle', label: '已完成', activeClass: 'pill-idle', countKey: 'idle' },
 ]
-
-const typeFilters = [
-  { key: 'all', label: '全部类型', color: '#475569' },
-  { key: 'thesis', label: '毕设论文', color: '#6366f1' },
-  { key: 'format', label: '格式修改', color: '#0ea5e9' },
-  { key: 'translation', label: '外文翻译', color: '#f59e0b' },
-  { key: 'design', label: '设计定制', color: '#8b5cf6' },
-  { key: 'reduction', label: '论文降重', color: '#10b981' },
-  { key: 'special', label: '特殊订单', color: '#ef4444' },
-]
-
-const allTypeFilter = typeFilters[0]
-const businessTypeFilters = typeFilters.slice(1)
-
-const orderTypeMap = {
-  thesis: { label: '毕设论文', color: '#6366f1' },
-  format: { label: '格式修改', color: '#0ea5e9' },
-  translation: { label: '外文翻译', color: '#f59e0b' },
-  design: { label: '设计定制', color: '#8b5cf6' },
-  reduction: { label: '论文降重', color: '#10b981' },
-  special: { label: '特殊订单', color: '#ef4444' },
-}
 
 const packageMetaMap = {
-  budget: { key: 'budget', icon: '¥', code: '套餐1', label: '省钱套餐' },
-  carefree: { key: 'carefree', icon: '✓', code: '套餐2', label: '省心套餐' },
-  vip: { key: 'vip', icon: '★', code: '套餐3', label: '超级VIP套餐' },
+  budget: { key: 'budget', code: '套餐1', label: '省钱套餐' },
+  carefree: { key: 'carefree', code: '套餐2', label: '省心套餐' },
+  vip: { key: 'vip', code: '套餐3', label: '超级VIP套餐' },
 }
 
 function getPackageMeta(packageTier) {
@@ -534,34 +524,6 @@ function getPackageMeta(packageTier) {
 function isSelfHandler(order) {
   const handler = String(order?.handler || '').trim()
   return !handler || handler === '本人'
-}
-
-function hexToRgba(hex, alpha) {
-  const normalized = (hex || '').replace('#', '')
-  if (normalized.length !== 6) return `rgba(148, 163, 184, ${alpha})`
-  const r = parseInt(normalized.slice(0, 2), 16)
-  const g = parseInt(normalized.slice(2, 4), 16)
-  const b = parseInt(normalized.slice(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
-
-function getTypeButtonStyle(type) {
-  const isActive = props.typeFilter === type.key
-  const color = type.color || '#64748b'
-  if (isActive) {
-    return {
-      color: '#fff',
-      borderColor: color,
-      background: `linear-gradient(135deg, ${color} 0%, ${hexToRgba(color, 0.86)} 100%)`,
-      boxShadow: `0 10px 22px ${hexToRgba(color, 0.26)}`,
-    }
-  }
-  return {
-    color,
-    borderColor: hexToRgba(color, 0.18),
-    background: `linear-gradient(135deg, ${hexToRgba(color, 0.12)} 0%, ${hexToRgba(color, 0.04)} 100%)`,
-    boxShadow: 'none',
-  }
 }
 
 function isGroupExpanded(key) {
@@ -618,8 +580,8 @@ function getStatus(order) {
   width: var(--gt-sidebar-width);
   min-width: var(--gt-sidebar-width);
   max-width: var(--gt-sidebar-width);
-  background: #fff;
-  border-right: 1px solid #e2e8f0;
+  background: var(--gt-surface);
+  border-right: 1px solid var(--gt-border);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -627,6 +589,7 @@ function getStatus(order) {
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.02);
   position: relative;
   z-index: 10;
+  container-type: inline-size;
 }
 
 .drag-region {
@@ -640,8 +603,8 @@ function getStatus(order) {
 }
 
 .sidebar-head {
-  padding: 0 var(--gt-sidebar-head-px) var(--gt-sidebar-head-pb);
-  border-bottom: 1px solid #f1f5f9;
+  padding: 0 var(--gt-sidebar-section-px) 9px;
+  border-bottom: 1px solid var(--gt-border);
   flex-shrink: 0;
 }
 
@@ -649,7 +612,7 @@ function getStatus(order) {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .brand-copy {
@@ -673,15 +636,15 @@ function getStatus(order) {
 .brand-title {
   font-size: var(--gt-brand-title-size);
   font-weight: 700;
-  color: #1e293b;
+  color: var(--gt-text-body);
 }
 
 .brand-version {
   font-size: 11px;
   font-weight: 700;
-  color: #6366f1;
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
+  color: var(--gt-text-violet);
+  background: var(--gt-accent-surface);
+  border: 1px solid var(--gt-accent-border);
   border-radius: 999px;
   padding: 2px 8px;
   line-height: 1.2;
@@ -691,286 +654,268 @@ function getStatus(order) {
 .search-input :deep(.el-input__wrapper) {
   border-radius: 8px;
   box-shadow: none;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border: 1px solid var(--gt-border);
+  background: var(--gt-surface-subtle);
 }
 
 .search-input :deep(.el-input__wrapper.is-focus) {
-  border-color: #6366f1;
+  border-color: light-dark(#6366f1, #a5b4fc);
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
 }
 
 .filter-panel {
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  border-bottom: 1px solid #e2e8f0;
+  display: grid;
+  gap: 5px;
   flex-shrink: 0;
+  padding: 8px var(--gt-sidebar-section-px);
+  border-bottom: 1px solid var(--gt-border);
 }
 
-.grad-seg {
+.filter-controls {
+  position: relative;
+}
+
+.quick-filters {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  margin: -8px calc(-1 * var(--gt-sidebar-section-px)) 0;
+  padding: 7px var(--gt-sidebar-section-px);
+  border-bottom: 1px solid var(--gt-border);
+  background: linear-gradient(180deg, var(--gt-surface-subtle), var(--gt-surface-muted));
+}
+
+.graduation-filters {
   display: flex;
-  padding: 10px var(--gt-sidebar-section-px) 0;
   gap: 4px;
-  background: #f8fafc;
-  flex-wrap: wrap;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
-.grad-seg-btn {
-  padding: 5px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #64748b;
-  border-radius: 16px;
-  transition: all 0.15s;
+.graduation-filter {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 4px;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--gt-border-strong);
+  border-radius: 999px;
+  background: var(--gt-surface);
+  color: light-dark(#334155, var(--gt-text-body));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
+  cursor: pointer;
 }
 
-.grad-seg-btn:hover {
-  color: #4f46e5;
-  border-color: #c7d2fe;
-  background: #eef2ff;
+.graduation-filter:hover {
+  border-color: light-dark(#818cf8, #a5b4fc);
 }
 
-.grad-seg-active {
+.graduation-filter[aria-pressed="true"] {
+  border-color: #4f46e5;
   background: #4f46e5;
   color: #fff;
-  border-color: #4f46e5;
 }
 
-.grad-seg-active:hover {
-  background: #4338ca;
-  color: #fff;
-  border-color: #4338ca;
+.graduation-filter:focus-visible {
+  outline-offset: -2px;
 }
 
-.grad-current-tag {
-  font-size: 10px;
-  background: rgba(255,255,255,0.25);
-  padding: 0 4px;
+.current-year-label {
+  padding: 1px 4px;
   border-radius: 4px;
-  line-height: 1.4;
+  background: var(--gt-accent-surface-strong);
+  color: var(--gt-text-violet);
+  font-size: 9px;
 }
 
-.grad-seg-active .grad-current-tag {
-  background: rgba(255,255,255,0.3);
+.graduation-filter[aria-pressed="true"] .current-year-label {
+  background: #ffffff40;
+  color: #fff;
 }
 
-.type-seg {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px var(--gt-sidebar-section-px) 11px;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.type-seg-grid {
+.type-filters,
+.type-filter-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 5px;
 }
 
-.type-seg-btn {
-  min-height: var(--gt-filter-btn-height);
-  padding: 6px 8px;
+.type-filter-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.type-filter-all,
+.type-filter {
+  min-height: 30px;
+  padding: 3px 6px;
+  border: 1px solid;
+  border-radius: 10px;
+  font: inherit;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
-  text-align: center;
+}
+
+.type-filter-all {
+  border-color: var(--gt-border-strong);
+  background: var(--gt-surface);
+  color: light-dark(#334155, var(--gt-text-body));
+}
+
+.type-filter-all[aria-pressed="true"] {
+  border-color: light-dark(#334155, var(--gt-border-strong));
+  background: linear-gradient(135deg, light-dark(#334155, #262626), light-dark(#475569, #353535));
+  color: #fff;
+}
+
+.type-filter {
+  border-color: color-mix(in srgb, var(--type-color) 24%, var(--gt-surface));
+  background: color-mix(in srgb, var(--type-color) 8%, var(--gt-surface));
+  color: var(--type-color);
+}
+
+.type-filter[aria-pressed="true"] {
+  border-color: var(--type-color);
+  background: var(--type-color);
+  color: var(--gt-type-on);
+}
+
+.type-filter-all:hover,
+.type-filter:hover {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.advanced-toggle,
+.toolbar-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: var(--gt-surface);
+  border: 1px solid var(--gt-border);
+  border-radius: 6px;
+  color: light-dark(#28364b, var(--gt-text-body));
+  font: inherit;
+  font-size: 12px;
   white-space: nowrap;
-}
-
-.type-seg-btn:hover {
-  transform: translateY(-1px);
-}
-
-.type-seg-active {
-  transform: translateY(-1px);
-}
-
-.type-seg-active:hover {
-  transform: translateY(-1px);
-}
-
-.type-seg-btn-all,
-.type-seg-btn-business {
-  width: 100%;
-}
-
-@media (max-width: 520px) {
-  .type-seg-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-.filter-body {
-  padding: 10px var(--gt-sidebar-section-px) 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  cursor: pointer;
 }
 
 .advanced-toggle {
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 9px 12px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  background: linear-gradient(180deg, #ffffff, #f8fafc);
-  color: #475569;
-  cursor: pointer;
-  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  min-height: 30px;
+  padding: 0 9px;
+  font-weight: 600;
 }
 
-.advanced-toggle:hover {
-  border-color: #cbd5e1;
-  background: linear-gradient(180deg, #ffffff, #f1f5f9);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
-  transform: translateY(-1px);
+.advanced-toggle-label {
+  margin-right: auto;
 }
 
-.advanced-toggle-active {
-  border-color: #c7d2fe;
-  background: linear-gradient(180deg, #f8faff, #eef2ff);
-  box-shadow: 0 10px 20px rgba(99, 102, 241, 0.08);
-}
-
-.advanced-toggle-left,
-.advanced-toggle-right {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.advanced-toggle-text {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+.advanced-toggle:hover,
+.advanced-toggle-active,
+.toolbar-action:hover {
+  color: var(--gt-text-violet);
+  background: var(--gt-accent-surface);
+  border-color: var(--gt-accent-border);
 }
 
 .advanced-toggle-badge {
+  min-width: 17px;
+  padding: 1px 4px;
+  border-radius: 8px;
+  background: #4338ca;
+  color: #fff;
   font-size: 10px;
-  font-weight: 700;
-  color: #4f46e5;
-  background: rgba(99, 102, 241, 0.12);
-  padding: 3px 7px;
-  border-radius: 999px;
-  line-height: 1;
-}
-
-.advanced-toggle-arrow {
-  color: #64748b;
+  text-align: center;
 }
 
 .cascade-shell {
-  padding: 8px 10px 9px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.96));
-  border: 1px solid #e2e8f0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 10px 24px rgba(15, 23, 42, 0.04);
-}
-
-.cascade-shell-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-
-.cascade-shell-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #334155;
-  line-height: 1.2;
-}
-
-.cascade-shell-sub {
-  font-size: 9px;
-  color: #94a3b8;
-  white-space: nowrap;
-  line-height: 1.2;
+  margin-top: 5px;
+  padding: 5px 8px 2px;
+  border: 1px solid var(--gt-border);
+  border-radius: 8px;
+  background: var(--gt-surface-subtle);
 }
 
 .cascade-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 4px 8px;
 }
 
 .filter-field {
-  position: relative;
-  padding: 7px 8px 8px;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  background: #fff;
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-}
-
-.filter-field:hover {
-  transform: translateY(-1px);
-  border-color: #dbe4ff;
-  box-shadow: 0 10px 18px rgba(99, 102, 241, 0.08);
-}
-
-.filter-field-label {
-  display: inline-flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 3em minmax(0, 1fr);
   gap: 5px;
-  margin-bottom: 5px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1.1;
+  align-items: center;
+  color: light-dark(#334155, var(--gt-text-body));
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.filter-field-university .filter-field-label { color: #4f46e5; }
-.filter-field-major .filter-field-label { color: #0f766e; }
-.filter-field-receiver .filter-field-label { color: #c2410c; }
-.filter-field-handler .filter-field-label { color: #7c3aed; }
-
-.cascade-select :deep(.el-select__wrapper),
-.organizer-select :deep(.el-select__wrapper) {
-  min-height: 34px;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #f8fafc, #f1f5f9);
-  box-shadow: inset 0 0 0 1px #e2e8f0;
+.list-organizer :deep(.el-select__wrapper) {
+  min-height: 30px;
+  border-radius: 6px;
 }
 
-.cascade-select :deep(.el-select__wrapper.is-focused),
-.organizer-select :deep(.el-select__wrapper.is-focused) {
-  background: #ffffff;
-  box-shadow: inset 0 0 0 1px #6366f1, 0 0 0 4px rgba(99, 102, 241, 0.12);
+.cascade-grid :deep(.el-select__wrapper) {
+  min-height: 28px;
+  border-radius: 6px;
+}
+
+.title-missing-filter {
+  height: 22px;
+  margin: 1px 0 0;
+}
+
+@media (max-height: 700px) {
+  .sidebar-head {
+    padding-bottom: 7px;
+  }
+
+  .brand-row {
+    margin-bottom: 5px;
+  }
+
+  .filter-panel {
+    gap: 4px;
+    padding-bottom: 5px;
+  }
+
+  .quick-filters {
+    padding-block: 5px;
+  }
+
+  .type-filter-all,
+  .type-filter {
+    min-height: 27px;
+  }
+
+  .cascade-shell {
+    position: absolute;
+    z-index: 5;
+    top: 0;
+    left: calc(100% + var(--gt-sidebar-section-px) + 8px);
+    width: 350px;
+    margin: 0;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  }
 }
 
 .status-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-}
-
-.title-missing-filter {
-  margin-top: 8px;
-  color: #b45309;
-  font-size: 12px;
+  gap: 4px;
 }
 
 .filter-pill {
-  padding: 5px 10px;
+  min-height: 27px;
+  padding: 3px 7px;
   border-radius: 20px;
   font-size: 11px;
   white-space: nowrap;
@@ -985,74 +930,75 @@ function getStatus(order) {
 }
 
 .pill-default {
-  background: #f1f5f9;
-  color: #64748b;
-  border-color: #e2e8f0;
+  background: var(--gt-surface-muted);
+  color: var(--gt-text-main);
+  font-weight: 600;
+  border-color: var(--gt-border-strong);
 }
 
 .pill-default:hover {
-  background: #e2e8f0;
-  color: #475569;
+  background: var(--gt-surface-raised);
+  color: var(--gt-text-heading);
 }
 
 .pill-key-all.pill-default {
-  background: #f0f0ff;
-  color: #6366f1;
-  border-color: #e0e7ff;
+  background: light-dark(#f0f0ff, #24223d);
+  color: var(--gt-text-violet);
+  border-color: var(--gt-accent-border);
 }
 
 .pill-key-draft.pill-default {
-  background: #faf5ff;
-  color: #9333ea;
-  border-color: #ede9fe;
+  background: light-dark(#faf5ff, #2d2445);
+  color: light-dark(#9333ea, #d8b4fe);
+  border-color: light-dark(#ede9fe, #654e90);
 }
 
 .pill-key-todo.pill-default {
-  background: #fffbeb;
-  color: #d97706;
-  border-color: #fef3c7;
+  background: var(--gt-warning-surface);
+  color: var(--gt-text-warning);
+  border-color: var(--gt-warning-border);
 }
 
 .pill-key-unpaid.pill-default {
-  background: #fff5f5;
-  color: #e11d48;
-  border-color: #ffe4e6;
+  background: light-dark(#fff5f5, #352333);
+  color: var(--gt-text-danger);
+  border-color: var(--gt-danger-border);
 }
 
 .pill-all {
-  background: #e0e7ff;
-  color: #3730a3;
-  border-color: #a5b4fc;
+  background: var(--gt-accent-surface-strong);
+  color: light-dark(#3730a3, #c7d2fe);
+  border-color: light-dark(#a5b4fc, #6683b4);
 }
 
 .pill-draft {
-  background: #ede9fe;
-  color: #6b21a8;
-  border-color: #c4b5fd;
+  background: light-dark(#ede9fe, #2d2445);
+  color: light-dark(#6b21a8, #d8b4fe);
+  border-color: light-dark(#c4b5fd, #654e90);
 }
 
 .pill-todo {
-  background: #fef3c7;
-  color: #92400e;
-  border-color: #fcd34d;
+  background: light-dark(#fef3c7, #48351c);
+  color: var(--gt-text-warning);
+  border-color: light-dark(#fcd34d, #9b6c31);
 }
 
 .pill-unpaid {
-  background: #ffe4e6;
-  color: #9f1239;
-  border-color: #fda4af;
+  background: light-dark(#ffe4e6, #352333);
+  color: light-dark(#9f1239, #fda4af);
+  border-color: light-dark(#fda4af, #965264);
 }
 
 .pill-idle {
-  background: linear-gradient(135deg, #e0e7ff, #ede9fe, #fce7f3);
-  color: #6d28d9;
-  border-color: #c4b5fd;
+  background: linear-gradient(135deg, var(--gt-accent-surface-strong), light-dark(#ede9fe, #2d2445), light-dark(#fce7f3, #332743));
+  color: light-dark(#6d28d9, #d8b4fe);
+  border-color: light-dark(#c4b5fd, #654e90);
 }
 
 .pill-key-idle.pill-default {
-  background: linear-gradient(135deg, #eef2ff, #f5f3ff, #fdf2f8);
-  color: #7c3aed;
-  border-color: #ddd6fe;
+  background: linear-gradient(135deg, var(--gt-accent-surface), light-dark(#f5f3ff, #2d2445), light-dark(#fdf2f8, #332743));
+  color: light-dark(#7c3aed, #d8b4fe);
+  border-color: light-dark(#ddd6fe, #654e90);
 }
 
 .pill-count {
@@ -1066,69 +1012,49 @@ function getStatus(order) {
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
-  background: rgba(0,0,0,0.12);
+  background: light-dark(rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0.12));
   color: inherit;
 }
 
-.list-organizer {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.organizer-field {
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 8px;
-  background: #fff;
-}
-
-.organizer-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  color: #64748b;
-  letter-spacing: 0.03em;
-}
-
-.reset-row {
+.result-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 5px;
+  min-width: 0;
 }
 
-.result-meta {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  color: #64748b;
+.list-organizer {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
 }
 
 .result-count {
-  font-size: 16px;
+  padding-right: 2px;
+  color: var(--gt-text-body);
+  font-size: 12px;
   font-weight: 700;
-  color: #1e293b;
+  white-space: nowrap;
 }
 
-.result-label {
-  font-size: 11px;
-}
-
-.reset-filters-btn {
-  padding: 0 4px;
-  font-size: 11px;
+.toolbar-action {
+  width: 28px;
+  height: 30px;
+  flex-shrink: 0;
+  font-size: 14px;
 }
 
 .order-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 10px var(--gt-sidebar-section-px);
+  padding: 5px var(--gt-sidebar-section-px);
 }
 
 .order-group + .order-group {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .order-group {
@@ -1140,10 +1066,11 @@ function getStatus(order) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 7px 6px;
+  padding: 2px 6px;
+  min-height: 28px;
   width: 100%;
   border: none;
-  background: rgba(248, 250, 252, 0.96);
+  background: color-mix(in srgb, var(--gt-surface-subtle) 96%, transparent);
   backdrop-filter: blur(10px);
   cursor: pointer;
   text-align: left;
@@ -1152,19 +1079,17 @@ function getStatus(order) {
   z-index: 4;
   border-radius: 10px;
   box-shadow: 0 6px 14px rgba(148, 163, 184, 0.08);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .order-group-title {
-  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
   font-weight: 700;
-  color: #334155;
-}
-
-.order-group-sub {
-  font-size: 10px;
-  color: #94a3b8;
-  margin-top: 2px;
+  color: var(--gt-text-body);
 }
 
 .order-group-right {
@@ -1177,43 +1102,47 @@ function getStatus(order) {
   min-width: 24px;
   height: 24px;
   border-radius: 999px;
-  background: #eef2ff;
-  color: #4338ca;
+  background: var(--gt-accent-surface);
+  color: light-dark(#312e81, #c7d2fe);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .order-group-arrow {
-  color: #94a3b8;
+  color: var(--gt-text-main);
   transition: transform 0.15s ease, color 0.15s ease;
 }
 
 .order-group-arrow-open {
   transform: rotate(180deg);
-  color: #4f46e5;
+  color: light-dark(#4f46e5, #c7d2fe);
 }
 
 .order-card {
-  padding: var(--gt-order-card-py) var(--gt-order-card-px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  padding: 6px 9px;
+  line-height: 1.35;
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid #f1f5f9;
-  background: #fff;
-  margin-bottom: 8px;
+  border: 1px solid var(--gt-border);
+  background: var(--gt-surface);
+  margin-bottom: 6px;
 }
 
 .order-card:hover {
-  border-color: #cbd5e1;
+  border-color: var(--gt-border-strong);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 .order-card.active {
-  background: #eef2ff;
-  border-color: #c7d2fe;
+  background: var(--gt-accent-surface);
+  border-color: light-dark(var(--gt-accent-border), #707b9c);
   box-shadow: 0 1px 4px rgba(99, 102, 241, 0.08);
 }
 
@@ -1221,7 +1150,6 @@ function getStatus(order) {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 6px;
   gap: 8px;
 }
 
@@ -1229,7 +1157,7 @@ function getStatus(order) {
   font-size: var(--gt-text-sm);
   font-weight: 600;
   line-height: 1.4;
-  color: #1e293b;
+  color: var(--gt-text-body);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1239,7 +1167,7 @@ function getStatus(order) {
 }
 
 .order-card.active .card-title {
-  color: #312e81;
+  color: light-dark(#312e81, #c7d2fe);
 }
 
 .type-badge {
@@ -1251,131 +1179,110 @@ function getStatus(order) {
   white-space: nowrap;
 }
 
-.card-order-code {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  font-size: 11px;
-  font-weight: 700;
-  color: #4338ca;
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
-  border-radius: 4px;
-  padding: 2px 6px;
-  margin-bottom: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  letter-spacing: 0;
-}
-
-.card-package {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  max-width: 100%;
-  padding: 4px 8px;
-  margin-bottom: 6px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  font-size: 11px;
-}
-
-.card-package-icon,
-.card-package-code {
-  flex-shrink: 0;
-  font-weight: 700;
-}
-
-.card-package.package-budget { color: #047857; background: #ecfdf5; border-color: #a7f3d0; }
-.card-package.package-carefree { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
-.card-package.package-vip { color: #b45309; background: #fffbeb; border-color: #fde68a; }
-
-.card-school {
-  font-size: var(--gt-text-xs);
-  color: #64748b;
-  background: #f1f5f9;
-  padding: 2px 6px;
-  border-radius: 4px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 6px;
-}
-
-.card-special-service {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  font-size: var(--gt-text-xs);
-  color: #b91c1c;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 4px;
-  padding: 2px 6px;
-  margin-bottom: 6px;
-  min-width: 0;
-}
-
-.card-special-label {
-  flex-shrink: 0;
-  font-weight: 600;
-}
-
-.card-special-value {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.card-people {
-  display: flex;
-  gap: 12px;
-  font-size: var(--gt-text-xs);
-  color: #64748b;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-
-.card-people span {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-
+.card-identity,
+.card-school,
+.card-people,
 .card-group-chat {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: var(--gt-text-xs);
-  color: #64748b;
-  margin-bottom: 10px;
+  gap: 6px;
   min-width: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: light-dark(#334155, var(--gt-text-body));
 }
 
-.card-group-chat-label {
-  flex-shrink: 0;
+.card-identity {
+  flex-wrap: wrap;
+  row-gap: 3px;
 }
 
-.card-group-chat-value {
+.card-identity > span,
+.card-people > span > span,
+.card-group-chat > span {
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.card-bottom {
-  display: flex;
+.card-order-code {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px solid var(--gt-accent-border);
+  border-radius: 4px;
+  color: var(--gt-text-violet);
+  background: var(--gt-accent-surface);
+  font-weight: 700;
+}
+
+.card-school-badge {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  max-width: 100%;
+  gap: 3px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--gt-surface-raised);
+}
+
+.card-school-badge > span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.card-school .el-icon,
+.card-people .el-icon,
+.card-group-chat .el-icon {
+  flex-shrink: 0;
+}
+
+.card-people {
+  gap: 10px;
+}
+
+.card-people > span {
+  display: inline-flex;
   align-items: center;
-  padding-top: 10px;
-  border-top: 1px solid rgba(241, 245, 249, 0.8);
+  gap: 3px;
+  min-width: 0;
+}
+
+.card-package {
+  flex: 0 0 auto;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-weight: 600;
+}
+
+.card-package.package-budget { color: var(--gt-text-success); background: var(--gt-success-surface); }
+.card-package.package-carefree { color: var(--gt-text-accent); background: light-dark(#eff6ff, #24364e); }
+.card-package.package-vip { color: var(--gt-text-warning); background: var(--gt-warning-surface); }
+
+.card-special-service {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--gt-danger-surface);
+  color: light-dark(#991b1b, #fda4af);
+}
+
+.card-group-chat {
+  color: var(--gt-text-muted);
+}
+
+.card-bottom:has(.card-badges:empty) {
+  display: none;
 }
 
 .card-badges {
   display: flex;
-  gap: 6px;
+  gap: 3px 5px;
   flex-wrap: wrap;
 }
 
@@ -1383,34 +1290,35 @@ function getStatus(order) {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 3px 8px;
+  padding: 2px 5px;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .badge-warning,
 .badge-deadline-warn,
 .badge-refund {
-  background: #fffbeb;
-  color: #d97706;
+  background: var(--gt-warning-surface);
+  color: var(--gt-text-warning);
 }
 
 .badge-success,
 .badge-handler-paid {
-  background: #ecfdf5;
-  color: #059669;
+  background: var(--gt-success-surface);
+  color: var(--gt-text-success);
 }
 
 .badge-danger,
 .badge-unpaid {
-  background: #fff1f2;
-  color: #be123c;
+  background: light-dark(#fff1f2, #352333);
+  color: light-dark(#be123c, #fda4af);
 }
 
 .badge-handler-unpaid {
-  background: #fef3c7;
-  color: #b45309;
+  background: light-dark(#fef3c7, #48351c);
+  color: light-dark(#b45309, #fcd58a);
 }
 
 .order-card.card-urgency-warning {
@@ -1418,14 +1326,14 @@ function getStatus(order) {
 }
 
 .order-card.card-urgency-danger {
-  border-left: 3px solid #e11d48;
-  background: #fef2f2;
+  border-left: 3px solid light-dark(#e11d48, #fda4af);
+  background: var(--gt-danger-surface);
 }
 
 .order-card.card-urgency-danger.active {
-  background: #fef2f2;
-  border-color: #e11d48;
-  border-left: 3px solid #e11d48;
+  background: var(--gt-danger-surface);
+  border-color: light-dark(#e11d48, #fda4af);
+  border-left: 3px solid light-dark(#e11d48, #fda4af);
 }
 
 .order-card.card-urgency-warning.active {
@@ -1435,65 +1343,82 @@ function getStatus(order) {
 .empty-list {
   text-align: center;
   padding: 60px 0;
-  color: #94a3b8;
-  font-size: 13px;
+  color: var(--gt-text-main);
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
 .empty-list-sub {
   display: block;
   margin-top: 8px;
-  font-size: 11px;
-}
-
-.sidebar-foot {
-  padding: 12px var(--gt-sidebar-section-px);
-  border-top: 1px solid #e2e8f0;
-  background: #fff;
-}
-
-.foot-row {
-  display: flex;
-  gap: 8px;
-}
-
-.foot-row + .foot-row {
-  margin-top: 8px;
-}
-
-.foot-row-secondary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.create-btn {
-  flex: 1;
-  border-radius: 8px;
+  font-size: 12px;
+  color: var(--gt-text-body);
   font-weight: 500;
 }
 
-.settings-btn {
-  border-radius: 8px !important;
-  width: 100% !important;
-  padding: 0 !important;
-  color: #64748b !important;
-  border-color: #e2e8f0 !important;
+.sidebar-foot {
+  display: grid;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 7px var(--gt-sidebar-section-px);
+  border-top: 1px solid var(--gt-border-strong);
+  background: var(--gt-surface);
+}
+
+.create-btn {
+  width: 100%;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.sidebar-utilities {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.sidebar-utilities .settings-btn {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--gt-text-body);
+  border-color: var(--gt-border-strong);
+  border-radius: 7px;
+}
+
+@media (max-height: 700px) {
+  .sidebar-foot {
+    padding-block: 6px;
+  }
+}
+
+@container (max-width: 360px) {
+  .filter-pill {
+    padding-inline: 5px;
+  }
+
+  .list-organizer :deep(.el-select__wrapper) {
+    padding-inline: 5px;
+    gap: 3px;
+  }
 }
 
 .settings-btn:hover {
-  color: #4f46e5 !important;
-  border-color: #c7d2fe !important;
-  background: #eef2ff !important;
+  color: light-dark(#4f46e5, #c7d2fe) !important;
+  border-color: var(--gt-accent-border) !important;
+  background: var(--gt-accent-surface) !important;
 }
 
 .sync-btn:hover {
-  color: #0f766e !important;
-  border-color: #99f6e4 !important;
-  background: #ecfdf5 !important;
+  color: light-dark(#0f766e, #99f6e4) !important;
+  border-color: light-dark(#99f6e4, #376652) !important;
+  background: var(--gt-success-surface) !important;
 }
 
 .logout-btn:hover {
-  color: #e11d48 !important;
-  border-color: #fecdd3 !important;
-  background: #fff1f2 !important;
+  color: var(--gt-text-danger) !important;
+  border-color: var(--gt-danger-border) !important;
+  background: light-dark(#fff1f2, #352333) !important;
 }
 </style>

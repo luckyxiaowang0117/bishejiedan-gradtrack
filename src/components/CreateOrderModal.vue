@@ -28,11 +28,11 @@
                 :key="t.key"
                 class="type-option"
                 :class="{ active: form.orderType === t.key }"
-                :style="form.orderType === t.key ? { borderColor: t.color, background: t.color + '0a' } : {}"
+                :style="form.orderType === t.key ? { borderColor: t.color, background: `color-mix(in srgb, ${t.color} 8%, var(--gt-surface))` } : {}"
                 @click="form.orderType = t.key"
                 type="button"
               >
-                <span class="type-dot" :style="{ background: form.orderType === t.key ? t.color : '#cbd5e1' }" />
+                <span class="type-dot" :style="{ background: form.orderType === t.key ? t.color : 'var(--gt-border-strong)' }" />
                 <span class="type-label">{{ t.label }}</span>
                 <span class="type-desc">{{ t.desc }}</span>
               </button>
@@ -280,12 +280,12 @@ const dialogStyleVars = computed(() => ({
 }))
 
 const orderTypes = [
-  { key: 'thesis', label: '毕设论文', desc: '含论文、设计、修改', color: '#6366f1' },
-  { key: 'format', label: '格式修改', desc: '仅格式调整', color: '#0ea5e9' },
-  { key: 'translation', label: '外文翻译', desc: '翻译任务', color: '#f59e0b' },
-  { key: 'design', label: '设计定制', desc: '程序/单片机/机械设计', color: '#8b5cf6' },
-  { key: 'reduction', label: '论文降重', desc: '降重与修改交付', color: '#10b981' },
-  { key: 'special', label: '特殊订单', desc: '图例/PPT等灵活项目', color: '#ef4444' },
+  { key: 'thesis', label: '毕设论文', desc: '含论文、设计、修改', color: 'var(--gt-type-thesis)' },
+  { key: 'format', label: '格式修改', desc: '仅格式调整', color: 'var(--gt-type-format)' },
+  { key: 'translation', label: '外文翻译', desc: '翻译任务', color: 'var(--gt-type-translation)' },
+  { key: 'design', label: '设计定制', desc: '程序/单片机/机械设计', color: 'var(--gt-type-design)' },
+  { key: 'reduction', label: '论文降重', desc: '降重与修改交付', color: 'var(--gt-type-reduction)' },
+  { key: 'special', label: '特殊订单', desc: '图例/PPT等灵活项目', color: 'var(--gt-type-special)' },
 ]
 
 const specialServiceOptions = ['开题报告', '图例绘制', 'PPT制作', '其他特殊服务']
@@ -527,9 +527,10 @@ const folderPreview = computed(() => {
   const year = Number(form.value.graduationYear) || new Date().getFullYear()
   const uni = form.value.university || '学校名称'
   const major = form.value.major || '专业名称'
-  const title = form.value.title.trim() || '题目暂未确认'
-  const student = form.value.studentName.trim()
-  const folderName = student ? `${prefix}-${student}-${title}` : `${prefix}-${title}`
+  const folderName = getOrderFolderName({
+    ...form.value,
+    orderCode: form.value.groupChatName.trim() || '自动生成的订单编号',
+  })
   const subDir = typeSubDirMap[form.value.orderType] || '毕业设计'
   return `${year}届/${subDir}/${uni}/${major}专业/${folderName}`
 })
@@ -757,12 +758,12 @@ async function handleSave() {
 :deep(.el-form-item__label) {
   font-size: 12px;
   font-weight: 500;
-  color: #334155;
+  color: light-dark(#334155, var(--gt-text-body));
 }
 
 .order-dialog :deep(.el-dialog__header) {
-  background: #f8fafc;
-  border-bottom: 1px solid #f1f5f9;
+  background: var(--gt-surface-subtle);
+  border-bottom: 1px solid var(--gt-border);
   padding: 16px 24px;
 }
 
@@ -779,8 +780,8 @@ async function handleSave() {
 }
 
 .order-dialog :deep(.el-dialog__footer) {
-  background: #f8fafc;
-  border-top: 1px solid #f1f5f9;
+  background: var(--gt-surface-subtle);
+  border-top: 1px solid var(--gt-border);
 }
 
 .order-form {
@@ -832,16 +833,16 @@ async function handleSave() {
 }
 
 .column-card {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--gt-border);
   border-radius: 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  background: linear-gradient(180deg, var(--gt-surface) 0%, light-dark(#fbfdff, var(--gt-surface-muted)) 100%);
   padding: 14px;
 }
 
 .column-title {
   font-size: 13px;
   font-weight: 700;
-  color: #334155;
+  color: light-dark(#334155, var(--gt-text-body));
   margin-bottom: 12px;
 }
 
@@ -864,6 +865,7 @@ async function handleSave() {
 
 .folder-alert {
   margin-top: 2px;
+  overflow-wrap: anywhere;
 }
 
 /* Type selector */
@@ -878,15 +880,15 @@ async function handleSave() {
   align-items: flex-start;
   gap: 4px;
   padding: 12px 14px;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--gt-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--gt-surface);
   cursor: pointer;
   transition: all 0.15s;
 }
 .type-option:hover {
-  border-color: #cbd5e1;
-  background: #f8fafc;
+  border-color: var(--gt-border-strong);
+  background: var(--gt-surface-subtle);
 }
 .type-option.active {
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.1);
@@ -900,11 +902,12 @@ async function handleSave() {
 .type-label {
   font-size: 13px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--gt-text-body);
 }
 .type-desc {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: 12px;
+  color: var(--gt-text-main);
+  font-weight: 600;
 }
 
 @media (max-width: 980px) {

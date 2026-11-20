@@ -2,7 +2,7 @@
   <div class="tracker">
     <div class="tracker-header">
       <h3 class="tracker-title">
-        <el-icon :size="18" color="#6366f1"><Connection /></el-icon>
+        <el-icon :size="18" color="var(--gt-text-violet)"><Connection /></el-icon>
         修改意见与迭代记录
       </h3>
       <el-button type="primary" text bg size="small" @click="showCreateDialog = true">
@@ -122,7 +122,7 @@ async function handleCreate() {
 .tracker-title {
   font-size: 16px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--gt-text-body);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -131,11 +131,12 @@ async function handleCreate() {
 .tracker-empty {
   text-align: center;
   padding: 32px;
-  background: #fff;
-  border: 1px dashed #cbd5e1;
+  background: var(--gt-surface);
+  border: 1px dashed var(--gt-border-strong);
   border-radius: 12px;
-  color: #94a3b8;
-  font-size: 13px;
+  color: var(--gt-text-main);
+  font-weight: 600;
+  font-size: 13.5px;
 }
 
 .revision-list {
@@ -159,11 +160,11 @@ async function handleCreate() {
 .create-label {
   font-size: 13px;
   font-weight: 500;
-  color: #334155;
+  color: light-dark(#334155, var(--gt-text-body));
 }
 
 .required-mark {
-  color: #e11d48;
+  color: light-dark(#e11d48, #fda4af);
   margin-left: 2px;
 }
 

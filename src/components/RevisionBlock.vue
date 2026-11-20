@@ -11,6 +11,17 @@
           <h4 class="rev-title">{{ revision.title }}</h4>
         </div>
         <div class="rev-header-tags">
+          <el-button
+            v-if="pendingCount > 0"
+            text
+            bg
+            size="small"
+            type="primary"
+            class="batch-resolve-btn"
+            @click.stop="resolveAllItems"
+          >
+            <el-icon><Select /></el-icon> 一键全标完成 ({{ pendingCount }})
+          </el-button>
           <el-tag v-if="pendingCount > 0" type="warning" effect="plain" round class="status-capsule">
             {{ pendingCount }} 个待修改
           </el-tag>
@@ -50,14 +61,38 @@
     <!-- Content -->
     <div v-show="isExpanded" class="rev-content">
       <ul class="item-list">
-        <li v-for="item in items" :key="item.id" class="feedback-item">
+        <li v-for="item in items" :key="item.id" class="feedback-item" :class="{ 'is-editing': editingItemId === item.id }">
           <el-checkbox
             :model-value="!!item.isResolved"
             @change="toggleItem(item.id)"
             class="item-check"
           />
           <div class="item-body">
-            <p class="item-text" :class="{ resolved: item.isResolved }">{{ item.content }}</p>
+            <div v-if="editingItemId === item.id" class="item-inline-edit">
+              <el-input
+                v-model="editingContent"
+                type="textarea"
+                :rows="2"
+                placeholder="修改意见内容"
+                @keydown.enter.ctrl="saveEdit(item.id)"
+                @keydown.esc="cancelEdit"
+                class="edit-textarea"
+                autofocus
+              />
+              <div class="inline-edit-buttons">
+                <el-button size="small" type="primary" @click="saveEdit(item.id)">保存</el-button>
+                <el-button size="small" @click="cancelEdit">取消</el-button>
+              </div>
+            </div>
+            <p
+              v-else
+              class="item-text"
+              :class="{ resolved: item.isResolved }"
+              title="双击即可修改此条意见"
+              @dblclick="startEdit(item)"
+            >
+              {{ item.content }}
+            </p>
             <!-- Attachment thumbnails -->
             <div v-if="parseAttachments(item).length > 0" class="attach-list">
               <div
@@ -74,7 +109,7 @@
                     </div>
                   </div>
                   <div v-else class="file-icon-thumb">
-                    <el-icon :size="22" color="#6366f1"><Document /></el-icon>
+                    <el-icon :size="22" color="var(--gt-text-violet)"><Document /></el-icon>
                   </div>
                   <span class="attach-name">{{ att.name }}</span>
                 </div>
@@ -99,9 +134,14 @@
               </div>
             </div>
           </div>
-          <button class="item-delete" @click="deleteItem(item.id)">
-            <el-icon><Delete /></el-icon>
-          </button>
+          <div class="item-actions">
+            <button v-if="editingItemId !== item.id" class="item-action-btn item-edit-btn" title="编辑意见" @click="startEdit(item)">
+              <el-icon><Edit /></el-icon>
+            </button>
+            <button class="item-action-btn item-delete" title="删除意见" @click="deleteItem(item.id)">
+              <el-icon><Delete /></el-icon>
+            </button>
+          </div>
         </li>
       </ul>
 
@@ -119,7 +159,7 @@
             <img v-if="f.type.startsWith('image/')" :src="f.preview" class="pending-thumb" />
             <video v-else-if="f.type.startsWith('video/')" :src="f.preview" class="pending-thumb" />
             <div v-else class="pending-thumb pending-file-icon">
-              <el-icon :size="20" color="#6366f1"><Document /></el-icon>
+              <el-icon :size="20" color="var(--gt-text-violet)"><Document /></el-icon>
             </div>
             <span class="pending-name">{{ f.file.name }}</span>
             <button class="pending-remove" @click="removePendingFile(i)">
@@ -149,17 +189,22 @@
           <span>松开以添加为附件</span>
         </div>
 
-        <p class="input-hint">
-          <el-icon :size="12"><InfoFilled /></el-icon>
-          支持粘贴/拖拽任意文件作为附件。回车换行，Ctrl+Enter 提交。
-        </p>
+        <div class="input-bottom-bar">
+          <el-checkbox v-model="autoSplitLines" size="small" class="auto-split-checkbox">
+            多行文本自动拆分为独立待办清单
+          </el-checkbox>
+          <span class="input-hint">
+            <el-icon :size="12"><InfoFilled /></el-icon>
+            Ctrl+Enter 提交，支持截图直接粘贴
+          </span>
+        </div>
       </div>
 
       <!-- ═══ Delivery section ═══ -->
       <div class="delivery-section">
         <div class="delivery-header">
           <div class="delivery-title">
-            <el-icon :size="16" color="#10b981"><Upload /></el-icon>
+            <el-icon :size="16" color="var(--gt-text-success)"><Upload /></el-icon>
             <span>修改后交付</span>
           </div>
           <el-button type="success" text bg size="small" @click="handleSelectDelivery">
@@ -175,7 +220,7 @@
           @drop.prevent.stop="handleDeliveryDrop"
         >
           <div v-if="deliveryFiles.length === 0 && !isDeliveryDragOver" class="delivery-placeholder">
-            <el-icon :size="24" color="#cbd5e1"><UploadFilled /></el-icon>
+            <el-icon :size="24" color="var(--gt-border-strong)"><UploadFilled /></el-icon>
             <span>处理完修改后，将文件拖拽到此处或点击上方按钮上传</span>
           </div>
 
@@ -213,7 +258,7 @@
         <img v-if="previewType === 'image'" :src="'file://' + previewSrc" class="preview-img" />
         <video v-else-if="previewType === 'video'" :src="'file://' + previewSrc" controls autoplay class="preview-video" />
         <div v-else class="preview-file-info">
-          <el-icon :size="48" color="#6366f1"><Document /></el-icon>
+          <el-icon :size="48" color="var(--gt-text-violet)"><Document /></el-icon>
           <p>{{ previewTitle }}</p>
           <el-button type="primary" @click="openFileInSystem(previewSrc)">用系统程序打开</el-button>
         </div>
@@ -235,6 +280,51 @@ const inputText = ref('')
 const textareaRef = ref(null)
 const pendingFiles = ref([])
 const isInputDragOver = ref(false)
+
+const editingItemId = ref(null)
+const editingContent = ref('')
+const autoSplitLines = ref(true)
+
+function startEdit(item) {
+  editingItemId.value = item.id
+  editingContent.value = item.content
+}
+
+function cancelEdit() {
+  editingItemId.value = null
+  editingContent.value = ''
+}
+
+async function saveEdit(id) {
+  const content = editingContent.value.trim()
+  if (!content) {
+    ElMessage.warning('修改意见内容不能为空')
+    return
+  }
+  try {
+    await api.updateFeedback(id, content)
+    editingItemId.value = null
+    editingContent.value = ''
+    emit('changed')
+    ElMessage.success('已更新修改意见')
+  } catch (err) {
+    ElMessage.error('更新失败: ' + (err.message || err))
+  }
+}
+
+async function resolveAllItems() {
+  const unresolved = items.value.filter(i => !i.isResolved)
+  if (unresolved.length === 0) return
+  try {
+    for (const item of unresolved) {
+      await api.toggleFeedbackResolved(item.id)
+    }
+    emit('changed')
+    ElMessage.success(`已全部标记为完成（共 ${unresolved.length} 项）`)
+  } catch (err) {
+    ElMessage.error('操作失败: ' + (err.message || err))
+  }
+}
 
 const deliveryFiles = ref([])
 const isDeliveryDragOver = ref(false)
@@ -478,7 +568,13 @@ async function handleSubmit() {
     }
 
     if (text) {
-      await api.createFeedback(props.revision.id, text, savedAttachments)
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+      if (autoSplitLines.value && lines.length > 1 && savedAttachments.length === 0) {
+        await api.batchCreateFeedback(props.revision.id, lines)
+        ElMessage.success(`已智能拆分并添加 ${lines.length} 条修改意见`)
+      } else {
+        await api.createFeedback(props.revision.id, text, savedAttachments)
+      }
     } else if (savedAttachments.length > 0) {
       const defaultContent = savedAttachments.map(a => `[${a.type === 'image' ? '图片' : a.type === 'video' ? '视频' : '文件'}] ${a.name}`).join(', ')
       await api.createFeedback(props.revision.id, defaultContent, savedAttachments)
@@ -498,8 +594,8 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
 
 <style scoped>
 .rev-block {
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--gt-surface);
+  border: 1px solid var(--gt-border);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -511,8 +607,8 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   flex-direction: column;
   gap: 8px;
   padding: 14px 16px;
-  background: rgba(248, 250, 252, 0.5);
-  border-bottom: 1px solid #f1f5f9;
+  background: color-mix(in srgb, var(--gt-surface-subtle) 50%, transparent);
+  border-bottom: 1px solid var(--gt-border);
   cursor: pointer;
 }
 .rev-header-row1 {
@@ -556,7 +652,7 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   gap: 16px;
   padding-left: 22px;
 }
-.caret-icon { color: #94a3b8; flex-shrink: 0; }
+.caret-icon { color: var(--gt-text-main); flex-shrink: 0; }
 .delivery-tag {
   display: inline-flex;
   align-items: center;
@@ -565,18 +661,18 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   height: 24px;
   line-height: 1;
   font-size: 12px;
-  font-weight: 500;
-  color: #047857;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
+  font-weight: 700;
+  color: var(--gt-text-success);
+  background: var(--gt-success-surface);
+  border: 1px solid var(--gt-success-border);
   border-radius: 12px;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .rev-title {
   font-size: 14px;
-  font-weight: 600;
-  color: #334155;
+  font-weight: 700;
+  color: var(--gt-text-main);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -586,21 +682,23 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   align-items: center;
   gap: 4px;
   font-size: 12px;
+  font-weight: 600;
 }
-.color-default { color: #64748b; }
-.color-danger { color: #e11d48; }
-.color-warning { color: #d97706; }
+.color-default { color: var(--gt-text-main); }
+.color-danger { color: var(--gt-text-danger); }
+.color-warning { color: var(--gt-text-warning); }
 .date-input {
   background: transparent;
   border: none;
-  border-bottom: 1px dashed #cbd5e1;
+  border-bottom: 1px dashed var(--gt-border-strong);
   font-size: 12px;
+  font-weight: 600;
   color: inherit;
   width: 165px;
   cursor: pointer;
   padding: 0;
 }
-.date-input:focus { outline: none; border-bottom-color: #6366f1; }
+.date-input:focus { outline: none; border-bottom-color: light-dark(#6366f1, #a5b4fc); }
 .status-tag {
   font-weight: 700;
   font-size: 11px;
@@ -609,18 +707,19 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   gap: 2px;
   margin-left: 4px;
 }
-.status-tag.danger { color: #e11d48; }
-.status-tag.warning { color: #d97706; }
+.status-tag.danger { color: var(--gt-text-danger); }
+.status-tag.warning { color: var(--gt-text-warning); }
 .rev-created {
   font-size: 12px;
-  color: #94a3b8;
-  border-left: 1px solid #e2e8f0;
+  color: var(--gt-text-main);
+  font-weight: 600;
+  border-left: 1px solid var(--gt-border-strong);
   padding-left: 16px;
   white-space: nowrap;
 }
 
 /* ─── Content ─── */
-.rev-content { padding: 8px; background: #fff; }
+.rev-content { padding: 8px; background: var(--gt-surface); }
 .item-list { list-style: none; }
 .feedback-item {
   display: flex;
@@ -630,17 +729,17 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   border-radius: 8px;
   transition: background 0.15s;
 }
-.feedback-item:hover { background: #f8fafc; }
+.feedback-item:hover { background: var(--gt-surface-subtle); }
 .item-check { margin-top: 2px; }
 .item-body { flex: 1; min-width: 0; }
 .item-text {
-  font-size: 13px;
-  color: #334155;
+  font-size: 13.5px;
+  color: var(--gt-text-main);
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
 }
-.item-text.resolved { text-decoration: line-through; color: #9ca3af; }
+.item-text.resolved { text-decoration: line-through; color: var(--gt-text-muted); font-weight: 500; }
 
 /* ─── Attachments ─── */
 .attach-list {
@@ -657,11 +756,11 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   cursor: pointer;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--gt-border);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .attach-thumb:hover {
-  border-color: #6366f1;
+  border-color: light-dark(#6366f1, #a5b4fc);
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 .attach-thumb img {
@@ -691,17 +790,18 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f1f5f9;
+  background: var(--gt-surface-muted);
 }
 .attach-name {
   display: block;
-  font-size: 10px;
-  color: #64748b;
+  font-size: 11px;
+  color: var(--gt-text-main);
+  font-weight: 600;
   padding: 3px 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  background: #f8fafc;
+  background: var(--gt-surface-subtle);
 }
 
 /* Archive button on attachment */
@@ -712,9 +812,9 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   width: 22px;
   height: 22px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #e2e8f0;
-  color: #6366f1;
+  background: color-mix(in srgb, var(--gt-surface) 90%, transparent);
+  border: 1px solid var(--gt-border-strong);
+  color: var(--gt-text-violet);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -724,21 +824,87 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   z-index: 3;
 }
 .attach-thumb-wrap:hover .archive-btn { opacity: 1; }
-.archive-btn:hover { background: #eef2ff; }
+.archive-btn:hover { background: var(--gt-accent-surface); }
 
-.item-delete {
+.batch-resolve-btn {
+  font-size: 12px;
+  font-weight: 600;
+  height: 24px;
+  padding: 0 8px;
+}
+
+.item-inline-edit {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.inline-edit-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.item-action-btn {
   opacity: 0;
   padding: 4px;
   border: none;
   background: none;
-  color: #94a3b8;
+  color: var(--gt-text-main);
   cursor: pointer;
   border-radius: 4px;
   transition: all 0.15s;
-  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.feedback-item:hover .item-delete { opacity: 1; }
-.item-delete:hover { color: #e11d48; background: #fff1f2; }
+
+.feedback-item:hover .item-action-btn {
+  opacity: 1;
+}
+
+.item-edit-btn:hover {
+  color: light-dark(#4f46e5, #c7d2fe);
+  background: var(--gt-accent-surface);
+}
+
+.item-delete:hover {
+  color: var(--gt-text-danger);
+  background: light-dark(#fff1f2, #352333);
+}
+
+.input-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.auto-split-checkbox {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gt-text-main);
+}
+
+.input-hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gt-text-main);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
 /* ─── Pending files ─── */
 .pending-files {
@@ -747,8 +913,8 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   gap: 8px;
   margin-bottom: 10px;
   padding: 10px;
-  background: #f0fdf4;
-  border: 1px dashed #86efac;
+  background: light-dark(#f0fdf4, var(--gt-surface-muted));
+  border: 1px dashed light-dark(#86efac, var(--gt-border-strong));
   border-radius: 8px;
 }
 .pending-file {
@@ -756,8 +922,8 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   width: 88px;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid #d1fae5;
-  background: #fff;
+  border: 1px solid var(--gt-success-border);
+  background: var(--gt-surface);
 }
 .pending-thumb {
   width: 100%;
@@ -769,12 +935,13 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f1f5f9;
+  background: var(--gt-surface-muted);
 }
 .pending-name {
   display: block;
-  font-size: 10px;
-  color: #475569;
+  font-size: 11px;
+  color: var(--gt-text-main);
+  font-weight: 600;
   padding: 2px 4px;
   white-space: nowrap;
   overflow: hidden;
@@ -801,25 +968,25 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
 .input-area {
   margin-top: 8px;
   padding: 12px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--gt-border);
   position: relative;
   transition: background 0.2s;
 }
 .input-area.input-drag-over {
-  background: #eef2ff;
+  background: var(--gt-accent-surface);
 }
 .input-drag-overlay {
   position: absolute;
   inset: 0;
   border-radius: 8px;
-  background: rgba(99, 102, 241, 0.06);
-  border: 2px dashed #6366f1;
+  background: light-dark(rgba(99, 102, 241, 0.06), rgba(147, 197, 253, 0.12));
+  border: 2px dashed light-dark(#6366f1, #a5b4fc);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  color: #4f46e5;
+  color: light-dark(#4f46e5, #c7d2fe);
   font-size: 13px;
   font-weight: 500;
   z-index: 5;
@@ -829,8 +996,10 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
 .input-wrap textarea {
   width: 100%;
   font-size: 13px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  font-weight: 500;
+  color: var(--gt-text-main);
+  background: var(--gt-surface-subtle);
+  border: 1px solid var(--gt-border);
   border-radius: 8px;
   padding: 12px;
   padding-right: 44px;
@@ -840,26 +1009,27 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
 }
 .input-wrap textarea:focus {
   outline: none;
-  border-color: #6366f1;
+  border-color: light-dark(#6366f1, #a5b4fc);
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2);
 }
-.input-wrap textarea::placeholder { color: #94a3b8; }
+.input-wrap textarea::placeholder { color: var(--gt-text-muted); }
 .send-btn {
   position: absolute;
   bottom: 10px;
   right: 10px;
   padding: 6px;
-  background: #e0e7ff;
-  color: #4338ca;
+  background: var(--gt-accent-surface-strong);
+  color: var(--gt-text-violet);
   border: none;
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s;
 }
-.send-btn:hover { background: #c7d2fe; }
+.send-btn:hover { background: light-dark(#c7d2fe, var(--gt-surface-raised)); }
 .input-hint {
-  font-size: 10px;
-  color: #94a3b8;
+  font-size: 11px;
+  color: var(--gt-text-main);
+  font-weight: 600;
   margin-top: 6px;
   margin-left: 4px;
   display: flex;
@@ -885,14 +1055,15 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
 }
 .preview-file-info p {
   font-size: 14px;
-  color: #475569;
+  color: var(--gt-text-main);
+  font-weight: 600;
 }
 
 /* ─── Delivery Section ─── */
 .delivery-section {
   margin-top: 4px;
   padding: 12px;
-  border-top: 2px dashed #e2e8f0;
+  border-top: 2px dashed var(--gt-border-strong);
 }
 
 .delivery-header {
@@ -906,15 +1077,15 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #059669;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--gt-text-success);
 }
 
 .delivery-body {
   position: relative;
-  background: #f0fdf4;
-  border: 1.5px solid #bbf7d0;
+  background: light-dark(#f0fdf4, var(--gt-surface-muted));
+  border: 1.5px solid light-dark(#86efac, var(--gt-border-strong));
   border-radius: 10px;
   padding: 12px;
   min-height: 60px;
@@ -923,7 +1094,7 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
 .delivery-body.delivery-drag-over {
   border-color: #10b981;
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
-  background: #dcfce7;
+  background: light-dark(#dcfce7, #1d4338);
 }
 
 .delivery-placeholder {
@@ -933,8 +1104,9 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   justify-content: center;
   gap: 6px;
   padding: 12px;
-  color: #94a3b8;
-  font-size: 12px;
+  color: var(--gt-text-main);
+  font-weight: 600;
+  font-size: 12.5px;
   text-align: center;
 }
 
@@ -949,8 +1121,8 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: #fff;
-  border: 1px solid #d1fae5;
+  background: var(--gt-surface);
+  border: 1px solid var(--gt-success-border);
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
@@ -959,16 +1131,16 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   flex: 1;
 }
 .delivery-file:hover {
-  background: #ecfdf5;
-  border-color: #6ee7b7;
+  background: var(--gt-success-surface);
+  border-color: light-dark(#6ee7b7, #376652);
 }
 
 .delivery-file-icon {
   width: 34px;
   height: 34px;
   border-radius: 7px;
-  background: #f0fdf4;
-  border: 1px solid #d1fae5;
+  background: light-dark(#f0fdf4, #17352e);
+  border: 1px solid var(--gt-success-border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -985,16 +1157,17 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
 
 .delivery-file-name {
   font-size: 12px;
-  font-weight: 500;
-  color: #334155;
+  font-weight: 600;
+  color: var(--gt-text-main);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .delivery-file-meta {
-  font-size: 10px;
-  color: #94a3b8;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--gt-text-main);
 }
 
 .delivery-file-actions {
@@ -1011,13 +1184,13 @@ async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
   position: absolute;
   inset: 0;
   border-radius: 9px;
-  background: rgba(16, 185, 129, 0.08);
+  background: light-dark(rgba(16, 185, 129, 0.08), rgba(134, 239, 172, 0.18));
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  color: #059669;
+  color: var(--gt-text-success);
   font-size: 13px;
   font-weight: 500;
   pointer-events: none;

@@ -1,312 +1,371 @@
 <template>
   <el-dialog
     v-model="dialogVisible"
-    title="设置"
-    width="var(--gt-dialog-lg)"
+    title="系统设置"
+    width="min(860px, calc(100vw - 32px))"
     align-center
     :close-on-click-modal="false"
     :destroy-on-close="false"
     :before-close="beforeDialogClose"
     class="settings-dialog"
   >
-    <div class="settings-body">
-      <!-- Section 1: Root Directory -->
-      <div class="settings-section">
-        <div class="section-header">
-          <el-icon :size="18" color="#409eff"><FolderOpened /></el-icon>
-          <div>
-            <div class="section-title">项目文件夹根目录</div>
-            <div class="section-desc">新建订单时，将在此目录下自动创建专属项目文件夹</div>
-          </div>
-        </div>
-        <div class="dir-row">
-          <el-input :model-value="rootDir" readonly placeholder="未设置" />
-          <el-button type="primary" plain @click="handleSelectDir">
-            <el-icon><FolderOpened /></el-icon> 选择目录
-          </el-button>
-        </div>
-        <el-alert v-if="!rootDir" title="建议在创建第一个订单前配置此项，否则不会自动生成项目文件夹。" type="warning" show-icon :closable="false" class="settings-alert" />
-      </div>
+    <div class="settings-modal-layout">
+      <!-- 左侧分类 Tab 导航 -->
+      <aside class="settings-nav">
+        <button
+          v-for="tab in settingTabs"
+          :key="tab.key"
+          type="button"
+          class="settings-nav-item"
+          :class="{ active: currentTab === tab.key }"
+          @click="currentTab = tab.key"
+        >
+          <el-icon :size="16"><component :is="tab.icon" /></el-icon>
+          <span>{{ tab.label }}</span>
+        </button>
+      </aside>
 
-      <div class="settings-section order-code-section">
-        <div class="section-header">
-          <el-icon :size="18" color="#0f766e"><SetUp /></el-icon>
-          <div>
-            <div class="section-title">订单编号规则</div>
-            <div class="section-desc">固定前缀与各服务类型的默认编码</div>
-          </div>
-        </div>
-        <div class="order-code-fields">
-          <el-form-item label="固定前缀（选填）">
-            <el-input
-              v-model="orderCodeFixedPrefix"
-              maxlength="12"
-              placeholder="例: WH"
-              @input="orderCodeFixedPrefix = normalizeOrderCodeSegment($event)"
-              @change="persistOrderCodeSettings"
-            />
-          </el-form-item>
-          <el-form-item v-for="service in orderCodeTypes" :key="service.code" :label="service.label + '（' + service.code + '）'">
-            <el-input
-              v-model="orderCodeServiceCodes[service.code]"
-              maxlength="12"
-              :placeholder="service.code"
-              @input="orderCodeServiceCodes[service.code] = normalizeOrderCodeSegment($event)"
-              @change="persistOrderCodeSettings"
-            />
-          </el-form-item>
-        </div>
-        <div class="order-code-preview">
-          <span>编号预览</span>
-          <code>{{ orderCodePreview }}</code>
-        </div>
-        <div class="order-code-note">留空恢复该类型默认编码；已有订单编号保持不变。</div>
-      </div>
-
-      <!-- Section 2: Auto Launch -->
-      <div class="settings-section">
-        <div class="section-header">
-          <el-icon :size="18" color="#67c23a"><Monitor /></el-icon>
-          <div>
-            <div class="section-title">开机自启动</div>
-            <div class="section-desc">系统启动时自动运行本应用，支持 macOS 和 Windows</div>
-          </div>
-        </div>
-        <div class="auto-launch-row">
-          <el-switch v-model="autoLaunch" @change="handleAutoLaunchChange" />
-          <span class="auto-launch-text">{{ autoLaunch ? '已开启' : '已关闭' }}</span>
-        </div>
-      </div>
-
-      <!-- Section 3: Privacy Protection -->
-      <div class="settings-section privacy-section">
-        <div class="section-header">
-          <el-icon :size="18" color="#4f46e5"><Lock /></el-icon>
-          <div>
-            <div class="section-title">隐私保护</div>
-            <div class="section-desc">保留账号记忆，但进入主界面前按需验证当前账号密码</div>
-          </div>
-        </div>
-        <div class="privacy-options">
-          <div class="privacy-row">
-            <div>
-              <div class="privacy-title">启动时验证密码</div>
-              <div class="privacy-desc">开机自启或手动启动后，需要输入当前账号密码才能进入主界面</div>
+      <!-- 右侧设置主体内容区 -->
+      <div class="settings-main-scroll">
+        <!-- 1. 常规与偏好 -->
+        <div v-show="currentTab === 'general'" class="settings-tab-panel">
+          <div class="settings-section">
+            <div class="section-header">
+              <el-icon :size="18" class="appearance-icon"><Sunny /></el-icon>
+              <div>
+                <div class="section-title">外观</div>
+                <div class="section-desc">切换后立即生效，并记住本机的选择。</div>
+              </div>
             </div>
-            <el-switch v-model="requirePasswordOnStartup" @change="handlePrivacySettingChange('requirePasswordOnStartup', $event)" />
-          </div>
-          <div class="privacy-row">
-            <div>
-              <div class="privacy-title">后台恢复时验证密码</div>
-              <div class="privacy-desc">软件隐藏到后台后，通过托盘、桌面快捷方式或开始菜单重新打开时需要输入密码</div>
+            <div class="preference-row">
+              <el-radio-group
+                :model-value="appearanceMode"
+                :disabled="savingAppearance"
+                aria-label="外观"
+                class="appearance-switch"
+                @update:model-value="handleAppearanceChange"
+              >
+                <el-radio-button value="light">浅色</el-radio-button>
+                <el-radio-button value="dark">深色</el-radio-button>
+              </el-radio-group>
             </div>
-            <el-switch v-model="requirePasswordOnTrayRestore" @change="handlePrivacySettingChange('requirePasswordOnTrayRestore', $event)" />
           </div>
-        </div>
-      </div>
 
-      <!-- Section 4: Order Detail Preference -->
-      <div class="settings-section">
-        <div class="section-header">
-          <el-icon :size="18" color="#6366f1"><SetUp /></el-icon>
-          <div>
-            <div class="section-title">订单详情默认状态</div>
-            <div class="section-desc">控制打开订单时右侧详细信息默认折叠或展开</div>
+          <!-- Section 1: Root Directory -->
+          <div class="settings-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-text-accent)"><FolderOpened /></el-icon>
+              <div>
+                <div class="section-title">项目文件夹根目录</div>
+                <div class="section-desc">新建订单时，将在此目录下自动创建专属项目文件夹</div>
+              </div>
+            </div>
+            <div class="dir-row">
+              <el-input :model-value="rootDir" readonly placeholder="未设置" />
+              <el-button type="primary" plain @click="handleSelectDir">
+                <el-icon><FolderOpened /></el-icon> 选择目录
+              </el-button>
+            </div>
+            <el-alert v-if="!rootDir" title="建议在创建第一个订单前配置此项，否则不会自动生成项目文件夹。" type="warning" show-icon :closable="false" class="settings-alert" />
           </div>
-        </div>
-        <div class="preference-row">
-          <el-radio-group v-model="orderInfoDefaultExpanded" @change="handleOrderInfoDefaultChange">
-            <el-radio-button :value="false">默认折叠</el-radio-button>
-            <el-radio-button :value="true">默认展开</el-radio-button>
-          </el-radio-group>
-        </div>
-      </div>
 
-      <!-- Section 5: Syncthing Sync -->
-      <div class="settings-section sync-section">
-        <div class="section-header">
-          <el-icon :size="18" color="#0f766e"><RefreshRight /></el-icon>
-          <div>
-            <div class="section-title">一键同步（Syncthing）</div>
-            <div class="section-desc">先等 Syncthing 完成目录同步，再点击这里将交换目录中的变更与本机数据库对账合并</div>
+          <!-- Section 2: Auto Launch -->
+          <div class="settings-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-text-success)"><Monitor /></el-icon>
+              <div>
+                <div class="section-title">开机自启动</div>
+                <div class="section-desc">系统启动时自动运行本应用，支持 macOS 和 Windows</div>
+              </div>
+            </div>
+            <div class="auto-launch-row">
+              <el-switch v-model="autoLaunch" @change="handleAutoLaunchChange" />
+              <span class="auto-launch-text">{{ autoLaunch ? '已开启' : '已关闭' }}</span>
+            </div>
           </div>
-        </div>
 
-        <div class="dir-row">
-          <el-input :model-value="syncDir" readonly placeholder="未设置同步目录" />
-          <el-button type="primary" plain @click="handleSelectSyncDir">
-            <el-icon><FolderOpened /></el-icon> 选择目录
-          </el-button>
-        </div>
-
-        <div class="sync-meta-grid">
-          <div class="sync-meta-card">
-            <div class="sync-meta-label">上次同步时间</div>
-            <div class="sync-meta-value">{{ formattedLastSyncAt }}</div>
-          </div>
-          <div class="sync-meta-card">
-            <div class="sync-meta-label">同步状态</div>
-            <div class="sync-meta-value">{{ syncOverview.status || '未设置' }}</div>
-          </div>
-        </div>
-
-        <el-alert
-          :title="syncOverview.hint || '请先选择同步目录。'"
-          :type="syncDir ? 'info' : 'warning'"
-          show-icon
-          :closable="false"
-          class="settings-alert"
-        />
-
-        <div class="sync-summary">
-          <div class="sync-summary-title">同步状态说明</div>
-          <div class="sync-summary-text">{{ syncOverview.summary?.text || '自上次同步后，本机暂无重要新增记录' }}</div>
-          <div v-if="(syncOverview.summary?.details || []).length > 0" class="sync-summary-list">
-            <div v-for="detail in syncOverview.summary.details" :key="detail.title" class="sync-summary-item">
-              <span class="sync-summary-item-title">{{ detail.title }} {{ detail.count }} 条</span>
-              <span class="sync-summary-item-body">：{{ detail.items.join('、') }}<template v-if="detail.count > detail.items.length"> 等</template></span>
+          <!-- Section 4: Order Detail Preference -->
+          <div class="settings-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-text-violet)"><SetUp /></el-icon>
+              <div>
+                <div class="section-title">订单详情默认状态</div>
+                <div class="section-desc">控制打开订单时右侧详细信息默认折叠或展开</div>
+              </div>
+            </div>
+            <div class="preference-row">
+              <el-radio-group v-model="orderInfoDefaultExpanded" @change="handleOrderInfoDefaultChange">
+                <el-radio-button :value="false">默认折叠</el-radio-button>
+                <el-radio-button :value="true">默认展开</el-radio-button>
+              </el-radio-group>
             </div>
           </div>
         </div>
 
-        <div class="migration-actions">
-          <el-button type="success" :loading="syncBusy" @click="handleRunSync">
-            <el-icon><RefreshRight /></el-icon> 立即同步
-          </el-button>
-          <el-button plain :disabled="syncBusy" @click="loadSyncOverview">刷新状态</el-button>
-        </div>
-      </div>
-
-      <!-- Section 6: Design Type Management -->
-      <div class="settings-section">
-        <div class="section-header">
-          <el-icon :size="18" color="#8b5cf6"><SetUp /></el-icon>
-          <div>
-            <div class="section-title">设计类型管理</div>
-            <div class="section-desc">自定义设计类型、来源/子类型及状态选项</div>
+        <!-- 2. 编号规则 -->
+        <div v-show="currentTab === 'orderCode'" class="settings-tab-panel">
+          <div class="settings-section order-code-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-text-success)"><SetUp /></el-icon>
+              <div>
+                <div class="section-title">订单编号规则</div>
+                <div class="section-desc">固定前缀与各服务类型的默认编码</div>
+              </div>
+            </div>
+            <div class="order-code-fields">
+              <el-form-item label="固定前缀（选填）">
+                <el-input
+                  v-model="orderCodeFixedPrefix"
+                  maxlength="12"
+                  placeholder="例: WH"
+                  @input="orderCodeFixedPrefix = normalizeOrderCodeSegment($event)"
+                  @change="persistOrderCodeSettings"
+                />
+              </el-form-item>
+              <el-form-item v-for="service in orderCodeTypes" :key="service.code" :label="service.label + '（' + service.code + '）'">
+                <el-input
+                  v-model="orderCodeServiceCodes[service.code]"
+                  maxlength="12"
+                  :placeholder="service.code"
+                  @input="orderCodeServiceCodes[service.code] = normalizeOrderCodeSegment($event)"
+                  @change="persistOrderCodeSettings"
+                />
+              </el-form-item>
+            </div>
+            <div class="order-code-preview">
+              <span>编号预览</span>
+              <code>{{ orderCodePreview }}</code>
+            </div>
+            <div class="order-code-note">留空恢复该类型默认编码；已有订单编号保持不变。</div>
           </div>
         </div>
 
-        <div class="dt-list">
-          <div v-for="dt in designTypes" :key="dt.id" class="dt-card">
-            <div class="dt-card-header">
-              <el-input v-model="dt.typeName" size="small" class="dt-name-input" @blur="saveDT(dt)" />
-              <el-button text type="danger" size="small" @click="removeDT(dt.id)">
-                <el-icon><Delete /></el-icon>
+        <!-- 3. 数据同步与迁移 -->
+        <div v-show="currentTab === 'sync'" class="settings-tab-panel">
+          <!-- Section 5: Syncthing Sync -->
+          <div class="settings-section sync-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-text-success)"><RefreshRight /></el-icon>
+              <div>
+                <div class="section-title">一键同步（Syncthing）</div>
+                <div class="section-desc">先等 Syncthing 完成目录同步，再点击这里将交换目录中的变更与本机数据库对账合并</div>
+              </div>
+            </div>
+
+            <div class="dir-row">
+              <el-input :model-value="syncDir" readonly placeholder="未设置同步目录" />
+              <el-button type="primary" plain @click="handleSelectSyncDir">
+                <el-icon><FolderOpened /></el-icon> 选择目录
               </el-button>
             </div>
 
-            <!-- Sub types (if any) -->
-            <div v-if="dt.subTypes.length > 0" class="dt-sub-section">
-              <div class="dt-sub-label">子类型（各有独立状态）:</div>
-              <div v-for="(sub, si) in dt.subTypes" :key="si" class="dt-sub-row">
-                <el-input v-model="sub.name" size="small" placeholder="子类型名称" class="dt-sub-name" @blur="saveDT(dt)" />
-                <div class="dt-tags-wrap">
-                  <el-tag v-for="(s, idx) in sub.statuses" :key="idx" closable size="small" @close="removeSubStatus(dt, si, idx)">{{ s }}</el-tag>
-                  <el-input v-if="sub._adding" v-model="sub._newVal" size="small" class="dt-tag-input" @keydown.enter="confirmSubStatus(dt, sub)" @blur="confirmSubStatus(dt, sub)" placeholder="回车确认" />
-                  <el-button v-else text size="small" @click="sub._adding = true">+ 状态</el-button>
+            <div class="sync-meta-grid">
+              <div class="sync-meta-card">
+                <div class="sync-meta-label">上次同步时间</div>
+                <div class="sync-meta-value">{{ formattedLastSyncAt }}</div>
+              </div>
+              <div class="sync-meta-card">
+                <div class="sync-meta-label">同步状态</div>
+                <div class="sync-meta-value">{{ syncOverview.status || '未设置' }}</div>
+              </div>
+            </div>
+
+            <el-alert
+              :title="syncOverview.hint || '请先选择同步目录。'"
+              :type="syncDir ? 'info' : 'warning'"
+              show-icon
+              :closable="false"
+              class="settings-alert"
+            />
+
+            <div class="sync-summary">
+              <div class="sync-summary-title">同步状态说明</div>
+              <div class="sync-summary-text">{{ syncOverview.summary?.text || '自上次同步后，本机暂无重要新增记录' }}</div>
+              <div v-if="(syncOverview.summary?.details || []).length > 0" class="sync-summary-list">
+                <div v-for="detail in syncOverview.summary.details" :key="detail.title" class="sync-summary-item">
+                  <span class="sync-summary-item-title">{{ detail.title }} {{ detail.count }} 条</span>
+                  <span class="sync-summary-item-body">：{{ detail.items.join('、') }}<template v-if="detail.count > detail.items.length"> 等</template></span>
                 </div>
-                <el-button text type="danger" size="small" @click="removeSubType(dt, si)"><el-icon :size="12"><Close /></el-icon></el-button>
               </div>
-              <el-button text size="small" @click="addSubType(dt)">+ 添加子类型</el-button>
             </div>
 
-            <!-- Direct statuses (when no sub types) -->
-            <div v-else class="dt-status-section">
-              <div class="dt-sub-label">状态选项:</div>
-              <div class="dt-tags-wrap">
-                <el-tag v-for="(s, idx) in dt.statuses" :key="idx" closable size="small" @close="removeStatus(dt, idx)">{{ s }}</el-tag>
-                <el-input v-if="dt._adding" v-model="dt._newVal" size="small" class="dt-tag-input" @keydown.enter="confirmStatus(dt)" @blur="confirmStatus(dt)" placeholder="回车确认" />
-                <el-button v-else text size="small" @click="dt._adding = true">+ 状态</el-button>
+            <div class="migration-actions">
+              <el-button type="success" :loading="syncBusy" @click="handleRunSync">
+                <el-icon><RefreshRight /></el-icon> 立即同步
+              </el-button>
+              <el-button plain :disabled="syncBusy" @click="loadSyncOverview">刷新状态</el-button>
+            </div>
+          </div>
+
+          <!-- Section 8: Data Migration -->
+          <div class="settings-section migration-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-text-accent)"><UploadFilled /></el-icon>
+              <div>
+                <div class="section-title">多机数据迁移</div>
+                <div class="section-desc">A 机先导出，再同步订单文件夹，B 机导入后自动重映射路径</div>
               </div>
-              <el-button text size="small" style="margin-top: 6px" @click="convertToSubTypes(dt)">切换为子类型模式</el-button>
+            </div>
+            <div class="migration-note">
+              导入会覆盖当前账号下的订单数据，请先确认当前账号正确，并且网盘已同步完成。
+            </div>
+            <div class="migration-actions">
+              <el-button type="primary" plain :loading="migrationBusy" @click="handleExportMigration">
+                <el-icon><Download /></el-icon> 导出迁移文件
+              </el-button>
+              <el-button type="warning" plain :loading="migrationBusy" @click="handleImportMigration">
+                <el-icon><Upload /></el-icon> 导入迁移文件
+              </el-button>
             </div>
           </div>
         </div>
 
-        <el-button size="small" @click="addDT" style="margin-top: 8px">
-          <el-icon><Plus /></el-icon> 添加设计类型
-        </el-button>
-      </div>
-      <!-- Section 7: Change Password -->
-      <div class="settings-section">
-        <div class="section-header">
-          <el-icon :size="18" color="#f59e0b"><Lock /></el-icon>
-          <div>
-            <div class="section-title">修改登录密码</div>
-            <div class="section-desc">修改当前账号的登录密码</div>
+        <!-- 4. 文件夹整理 -->
+        <div v-show="currentTab === 'folders'" class="settings-tab-panel">
+          <!-- Section 9: Folder Migration -->
+          <div class="settings-section folder-migration-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-type-design)"><FolderOpened /></el-icon>
+              <div>
+                <div class="section-title">历史文件夹整理与拆分</div>
+                <div class="section-desc">按毕业届整理旧项目，或将共用空目录的订单拆分到独立目录</div>
+              </div>
+            </div>
+            <div class="migration-note">
+              执行前会先生成预览；迁移会复制资料到新目录并保留旧目录，确认无误后可手动清理旧文件夹。
+            </div>
+            <div class="migration-actions">
+              <el-button type="primary" plain :loading="folderMigrationBusy" @click="handlePreviewGraduationMigration">
+                <el-icon><View /></el-icon> 预览可迁移项目
+              </el-button>
+            </div>
           </div>
         </div>
-        <el-form :model="pwdForm" label-width="80px" size="default">
-          <el-form-item label="原密码">
-            <el-input v-model="pwdForm.oldPassword" type="password" show-password placeholder="请输入原密码" />
-          </el-form-item>
-          <el-form-item label="新密码">
-            <el-input v-model="pwdForm.newPassword" type="password" show-password placeholder="请输入新密码" />
-          </el-form-item>
-          <el-form-item label="确认密码">
-            <el-input v-model="pwdForm.confirmPassword" type="password" show-password placeholder="请再次输入新密码" />
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" :loading="pwdLoading" @click="handleChangePassword">确认修改</el-button>
-            <el-button @click="resetPwdForm">清空</el-button>
-          </el-form-item>
-        </el-form>
-      </div>
 
-      <!-- Section 8: Data Migration -->
-      <div class="settings-section migration-section">
-        <div class="section-header">
-          <el-icon :size="18" color="#2563eb"><UploadFilled /></el-icon>
-          <div>
-            <div class="section-title">多机数据迁移</div>
-            <div class="section-desc">A 机先导出，再同步订单文件夹，B 机导入后自动重映射路径</div>
-          </div>
-        </div>
-        <div class="migration-note">
-          导入会覆盖当前账号下的订单数据，请先确认当前账号正确，并且网盘已同步完成。
-        </div>
-        <div class="migration-actions">
-          <el-button type="primary" plain :loading="migrationBusy" @click="handleExportMigration">
-            <el-icon><Download /></el-icon> 导出迁移文件
-          </el-button>
-          <el-button type="warning" plain :loading="migrationBusy" @click="handleImportMigration">
-            <el-icon><Upload /></el-icon> 导入迁移文件
-          </el-button>
-        </div>
-      </div>
+        <!-- 5. 设计类型管理 -->
+        <div v-show="currentTab === 'design'" class="settings-tab-panel">
+          <!-- Section 6: Design Type Management -->
+          <div class="settings-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-type-design)"><SetUp /></el-icon>
+              <div>
+                <div class="section-title">设计类型管理</div>
+                <div class="section-desc">自定义设计类型、来源/子类型及状态选项</div>
+              </div>
+            </div>
 
-      <!-- Section 9: Folder Migration -->
-      <div class="settings-section folder-migration-section">
-        <div class="section-header">
-          <el-icon :size="18" color="#7c3aed"><FolderOpened /></el-icon>
-          <div>
-            <div class="section-title">历史文件夹整理与拆分</div>
-            <div class="section-desc">按毕业届整理旧项目，或将共用空目录的订单拆分到独立目录</div>
-          </div>
-        </div>
-        <div class="migration-note">
-          执行前会先生成预览；迁移会复制资料到新目录并保留旧目录，确认无误后可手动清理旧文件夹。
-        </div>
-        <div class="migration-actions">
-          <el-button type="primary" plain :loading="folderMigrationBusy" @click="handlePreviewGraduationMigration">
-            <el-icon><View /></el-icon> 预览可迁移项目
-          </el-button>
-        </div>
-      </div>
+            <div class="dt-list">
+              <div v-for="dt in designTypes" :key="dt.id" class="dt-card">
+                <div class="dt-card-header">
+                  <el-input v-model="dt.typeName" size="small" class="dt-name-input" @blur="saveDT(dt)" />
+                  <el-button text type="danger" size="small" @click="removeDT(dt.id)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
 
-      <!-- Section 10: Reset Data -->
-      <div class="settings-section reset-section">
-        <div class="section-header">
-          <el-icon :size="18" color="#e11d48"><WarnTriangleFilled /></el-icon>
-          <div>
-            <div class="section-title" style="color: #e11d48">危险操作 — 一键重置数据</div>
-            <div class="section-desc">清空所有订单、用户、设置等数据，此操作不可恢复</div>
+                <!-- Sub types (if any) -->
+                <div v-if="dt.subTypes.length > 0" class="dt-sub-section">
+                  <div class="dt-sub-label">子类型（各有独立状态）:</div>
+                  <div v-for="(sub, si) in dt.subTypes" :key="si" class="dt-sub-row">
+                    <el-input v-model="sub.name" size="small" placeholder="子类型名称" class="dt-sub-name" @blur="saveDT(dt)" />
+                    <div class="dt-tags-wrap">
+                      <el-tag v-for="(s, idx) in sub.statuses" :key="idx" :class="designStatusClass(s)" closable size="small" @close="removeSubStatus(dt, si, idx)">{{ s }}</el-tag>
+                      <el-input v-if="sub._adding" v-model="sub._newVal" size="small" class="dt-tag-input" @keydown.enter="confirmSubStatus(dt, sub)" @blur="confirmSubStatus(dt, sub)" placeholder="回车确认" />
+                      <el-button v-else text size="small" @click="sub._adding = true">+ 状态</el-button>
+                    </div>
+                    <el-button text type="danger" size="small" @click="removeSubType(dt, si)"><el-icon :size="12"><Close /></el-icon></el-button>
+                  </div>
+                  <el-button text size="small" @click="addSubType(dt)">+ 添加子类型</el-button>
+                </div>
+
+                <!-- Direct statuses (when no sub types) -->
+                <div v-else class="dt-status-section">
+                  <div class="dt-sub-label">状态选项:</div>
+                  <div class="dt-tags-wrap">
+                    <el-tag v-for="(s, idx) in dt.statuses" :key="idx" :class="designStatusClass(s)" closable size="small" @close="removeStatus(dt, idx)">{{ s }}</el-tag>
+                    <el-input v-if="dt._adding" v-model="dt._newVal" size="small" class="dt-tag-input" @keydown.enter="confirmStatus(dt)" @blur="confirmStatus(dt)" placeholder="回车确认" />
+                    <el-button v-else text size="small" @click="dt._adding = true">+ 状态</el-button>
+                  </div>
+                  <el-button text size="small" style="margin-top: 6px" @click="convertToSubTypes(dt)">切换为子类型模式</el-button>
+                </div>
+              </div>
+            </div>
+
+            <el-button size="small" @click="addDT" style="margin-top: 8px">
+              <el-icon><Plus /></el-icon> 添加设计类型
+            </el-button>
           </div>
         </div>
-        <el-button type="danger" plain @click="handleReset">
-          <el-icon><Delete /></el-icon> 重置所有数据
-        </el-button>
+
+        <!-- 6. 安全与重置 -->
+        <div v-show="currentTab === 'security'" class="settings-tab-panel">
+          <!-- Section 3: Privacy Protection -->
+          <div class="settings-section privacy-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-text-violet)"><Lock /></el-icon>
+              <div>
+                <div class="section-title">隐私保护</div>
+                <div class="section-desc">保留账号记忆，但进入主界面前按需验证当前账号密码</div>
+              </div>
+            </div>
+            <div class="privacy-options">
+              <div class="privacy-row">
+                <div>
+                  <div class="privacy-title">启动时验证密码</div>
+                  <div class="privacy-desc">开机自启或手动启动后，需要输入当前账号密码才能进入主界面</div>
+                </div>
+                <el-switch v-model="requirePasswordOnStartup" @change="handlePrivacySettingChange('requirePasswordOnStartup', $event)" />
+              </div>
+              <div class="privacy-row">
+                <div>
+                  <div class="privacy-title">后台恢复时验证密码</div>
+                  <div class="privacy-desc">软件隐藏到后台后，通过托盘、桌面快捷方式或开始菜单重新打开时需要输入密码</div>
+                </div>
+                <el-switch v-model="requirePasswordOnTrayRestore" @change="handlePrivacySettingChange('requirePasswordOnTrayRestore', $event)" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 7: Change Password -->
+          <div class="settings-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-text-warning)"><Lock /></el-icon>
+              <div>
+                <div class="section-title">修改登录密码</div>
+                <div class="section-desc">修改当前账号的登录密码</div>
+              </div>
+            </div>
+            <el-form :model="pwdForm" class="password-form" label-width="80px" size="default">
+              <el-form-item label="原密码">
+                <el-input v-model="pwdForm.oldPassword" type="password" show-password placeholder="请输入原密码" />
+              </el-form-item>
+              <el-form-item label="新密码">
+                <el-input v-model="pwdForm.newPassword" type="password" show-password placeholder="请输入新密码" />
+              </el-form-item>
+              <el-form-item label="确认密码">
+                <el-input v-model="pwdForm.confirmPassword" type="password" show-password placeholder="请再次输入新密码" />
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="pwdLoading" @click="handleChangePassword">确认修改</el-button>
+                <el-button @click="resetPwdForm">清空</el-button>
+              </el-form-item>
+            </el-form>
+          </div>
+
+          <!-- Section 10: Reset Data -->
+          <div class="settings-section reset-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-text-danger)"><WarnTriangleFilled /></el-icon>
+              <div>
+                <div class="section-title" style="color: var(--gt-text-danger)">危险操作 — 一键重置数据</div>
+                <div class="section-desc">清空所有订单、用户、设置等数据，此操作不可恢复</div>
+              </div>
+            </div>
+            <el-button type="danger" plain @click="handleReset">
+              <el-icon><Delete /></el-icon> 重置所有数据
+            </el-button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -424,11 +483,23 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { designStatusClass } from '../designStatus.js'
+import { appearanceMode, applyAppearance } from '../appearance.js'
 
 const props = defineProps({ visible: Boolean, currentUser: Object })
 const emit = defineEmits(['update:visible', 'reset', 'imported', 'order-info-default-change'])
 
 const api = window.electronAPI
+const currentTab = ref('general')
+const savingAppearance = ref(false)
+const settingTabs = [
+  { key: 'general', label: '基础偏好', icon: 'Setting' },
+  { key: 'orderCode', label: '编号规则', icon: 'SetUp' },
+  { key: 'sync', label: '数据同步', icon: 'RefreshRight' },
+  { key: 'folders', label: '目录整理', icon: 'FolderOpened' },
+  { key: 'design', label: '设计类型', icon: 'CollectionTag' },
+  { key: 'security', label: '安全与重置', icon: 'Lock' },
+]
 const rootDir = ref('')
 const syncDir = ref('')
 const autoLaunch = ref(false)
@@ -585,6 +656,19 @@ watch(() => props.visible, (val) => {
 async function handleAutoLaunchChange(val) {
   await api.setAutoLaunch(val)
   ElMessage.success(val ? '已开启开机自启动' : '已关闭开机自启动')
+}
+
+async function handleAppearanceChange(mode) {
+  if (savingAppearance.value || mode === appearanceMode.value) return
+  savingAppearance.value = true
+  try {
+    if (!await api.setSetting('appearanceMode', mode)) throw new Error('Invalid appearance')
+    applyAppearance(mode)
+  } catch {
+    ElMessage.error('外观设置保存失败，请重试')
+  } finally {
+    savingAppearance.value = false
+  }
 }
 
 async function handlePrivacySettingChange(key, val) {
@@ -969,12 +1053,80 @@ function convertToSubTypes(dt) {
 </script>
 
 <style scoped>
-.settings-body {
+.settings-modal-layout {
+  display: flex;
+  height: min(480px, calc(100vh - 144px));
+  border-top: 1px solid var(--gt-border);
+  border-bottom: 1px solid var(--gt-border);
+}
+
+:global(.el-dialog.settings-dialog) {
+  padding: 0;
+}
+
+:global(.settings-dialog .el-dialog__header) {
+  padding: 16px 48px 14px 20px;
+}
+
+:global(.settings-dialog .el-dialog__title) {
+  font-weight: 600;
+}
+
+:global(.settings-dialog .el-dialog__footer) {
+  padding: 12px 16px;
+}
+
+.settings-nav {
+  width: 170px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--gt-border);
+  padding: 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  max-height: 70vh;
+  gap: 6px;
+  background: var(--gt-surface-subtle);
   overflow-y: auto;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--gt-text-main);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.settings-nav-item:hover {
+  background: var(--gt-surface-muted);
+  color: var(--gt-text-heading);
+}
+
+.settings-nav-item.active {
+  background: var(--gt-surface);
+  color: light-dark(#4f46e5, #c7d2fe);
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.settings-main-scroll {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 24px 28px;
+  overflow-y: auto;
+}
+
+.settings-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .settings-section {
@@ -993,15 +1145,20 @@ function convertToSubTypes(dt) {
   flex-shrink: 0;
 }
 
+.appearance-icon {
+  color: var(--gt-text-accent);
+}
+
 .section-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: #303133;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--gt-text-heading);
 }
 
 .section-desc {
-  font-size: 12px;
-  color: #909399;
+  font-size: 12.5px;
+  color: var(--gt-text-main);
+  font-weight: 600;
   margin-top: 2px;
 }
 
@@ -1018,10 +1175,10 @@ function convertToSubTypes(dt) {
 }
 
 .order-code-section {
-  border: 1px solid #bfe8dc;
+  border: 1px solid light-dark(#bfe8dc, var(--gt-border));
   border-radius: 8px;
   padding: 14px;
-  background: #f5fbf9;
+  background: light-dark(#f5fbf9, var(--gt-surface-muted));
 }
 
 .order-code-fields {
@@ -1034,6 +1191,18 @@ function convertToSubTypes(dt) {
   margin-bottom: 0;
 }
 
+.order-code-fields :deep(.el-form-item__label),
+.password-form :deep(.el-form-item__label) {
+  font-weight: 500;
+}
+
+.dt-tags-wrap :deep(.el-tag) {
+  --el-tag-text-color: var(--gt-design-status-text);
+  --el-tag-bg-color: var(--gt-design-status-surface);
+  --el-tag-border-color: var(--gt-design-status-border);
+  font-weight: 600;
+}
+
 .order-code-preview {
   display: flex;
   align-items: center;
@@ -1041,15 +1210,16 @@ function convertToSubTypes(dt) {
   gap: 12px;
   min-height: 44px;
   padding: 8px 12px;
-  border: 1px solid #d5e9e3;
+  border: 1px solid var(--gt-border-strong);
   border-radius: 6px;
-  background: #ffffff;
-  color: #64748b;
-  font-size: 12px;
+  background: var(--gt-surface);
+  color: var(--gt-text-main);
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .order-code-preview code {
-  color: #0f766e;
+  color: light-dark(#0f766e, #99f6e4);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0;
@@ -1058,8 +1228,9 @@ function convertToSubTypes(dt) {
 }
 
 .order-code-note {
-  color: #64748b;
-  font-size: 12px;
+  color: var(--gt-text-main);
+  font-size: 12.5px;
+  font-weight: 600;
   line-height: 1.6;
 }
 
@@ -1070,10 +1241,10 @@ function convertToSubTypes(dt) {
 }
 
 .sync-section {
-  border: 1px solid #c7f9e5;
+  border: 1px solid light-dark(#c7f9e5, var(--gt-border));
   border-radius: 12px;
   padding: 14px;
-  background: linear-gradient(180deg, #f5fffb 0%, #f8fffd 100%);
+  background: linear-gradient(180deg, light-dark(#f5fffb, var(--gt-surface-muted)) 0%, light-dark(#f8fffd, var(--gt-surface-muted)) 100%);
 }
 
 .sync-meta-grid {
@@ -1083,44 +1254,46 @@ function convertToSubTypes(dt) {
 }
 
 .sync-meta-card {
-  border: 1px solid #d1fae5;
+  border: 1px solid var(--gt-success-border);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--gt-surface);
   padding: 12px;
 }
 
 .sync-meta-label {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--gt-text-main);
+  font-weight: 700;
 }
 
 .sync-meta-value {
   margin-top: 6px;
   font-size: 14px;
-  font-weight: 600;
-  color: #0f766e;
+  font-weight: 700;
+  color: light-dark(#0f766e, #99f6e4);
 }
 
 .sync-summary {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid #dbeafe;
+  border: 1px solid light-dark(#dbeafe, #50678e);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--gt-surface);
   padding: 12px;
 }
 
 .sync-summary-title {
   font-size: 13px;
-  font-weight: 600;
-  color: #0f172a;
+  font-weight: 700;
+  color: var(--gt-text-heading);
 }
 
 .sync-summary-text {
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.7;
-  color: #475569;
+  color: var(--gt-text-main);
+  font-weight: 600;
 }
 
 .sync-summary-list {
@@ -1130,17 +1303,20 @@ function convertToSubTypes(dt) {
 }
 
 .sync-summary-item {
-  font-size: 12px;
-  color: #334155;
+  font-size: 12.5px;
+  color: var(--gt-text-main);
+  font-weight: 500;
   line-height: 1.6;
 }
 
 .sync-summary-item-title {
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--gt-text-heading);
 }
 
 .sync-summary-item-body {
-  color: #64748b;
+  color: var(--gt-text-main);
+  font-weight: 600;
 }
 
 /* Auto launch */
@@ -1159,10 +1335,10 @@ function convertToSubTypes(dt) {
 }
 
 .privacy-section {
-  border: 1px solid #dbe4ff;
+  border: 1px solid var(--gt-accent-border);
   border-radius: 12px;
   padding: 14px;
-  background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+  background: linear-gradient(180deg, light-dark(#f8faff, var(--gt-surface-muted)) 0%, var(--gt-surface) 100%);
 }
 
 .privacy-options {
@@ -1177,46 +1353,49 @@ function convertToSubTypes(dt) {
   justify-content: space-between;
   gap: 16px;
   padding: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--gt-border-strong);
   border-radius: 10px;
-  background: #fff;
+  background: var(--gt-surface);
 }
 
 .privacy-title {
   font-size: 13px;
-  font-weight: 600;
-  color: #334155;
+  font-weight: 700;
+  color: var(--gt-text-heading);
 }
 
 .privacy-desc {
   margin-top: 3px;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--gt-text-main);
+  font-weight: 600;
   line-height: 1.5;
 }
 
 .auto-launch-text {
   font-size: 13px;
-  color: #606266;
+  color: var(--gt-text-main);
+  font-weight: 600;
 }
 
 .migration-section {
-  border: 1px solid #dbeafe;
+  border: 1px solid light-dark(#dbeafe, var(--gt-border));
   border-radius: 12px;
   padding: 14px;
-  background: #f8fbff;
+  background: light-dark(#f8fbff, var(--gt-surface-muted));
 }
 
 .folder-migration-section {
-  border: 1px solid #ede9fe;
+  border: 1px solid light-dark(#ede9fe, var(--gt-border));
   border-radius: 12px;
   padding: 14px;
-  background: #fbfaff;
+  background: light-dark(#fbfaff, var(--gt-surface-muted));
 }
 
 .migration-note {
-  font-size: 12px;
-  color: #64748b;
+  font-size: 12.5px;
+  color: var(--gt-text-main);
+  font-weight: 600;
   line-height: 1.6;
 }
 
@@ -1226,15 +1405,9 @@ function convertToSubTypes(dt) {
   flex-wrap: wrap;
 }
 
-.settings-dialog :deep(.el-dialog),
 .missing-folder-dialog :deep(.el-dialog),
 .folder-migration-dialog :deep(.el-dialog) {
   margin: 0 !important;
-}
-
-.settings-dialog :deep(.el-dialog__body) {
-  max-height: min(78vh, 760px);
-  overflow: auto;
 }
 
 .missing-folder-dialog :deep(.el-dialog__body) {
@@ -1260,8 +1433,9 @@ function convertToSubTypes(dt) {
 }
 
 .missing-count {
-  font-size: 12px;
-  color: #64748b;
+  font-size: 12.5px;
+  color: var(--gt-text-main);
+  font-weight: 600;
 }
 
 .missing-list {
@@ -1274,9 +1448,9 @@ function convertToSubTypes(dt) {
 }
 
 .missing-item {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--gt-border);
   border-radius: 10px;
-  background: #f8fafc;
+  background: var(--gt-surface-subtle);
   padding: 10px 12px;
 }
 
@@ -1289,18 +1463,19 @@ function convertToSubTypes(dt) {
 
 .missing-item-title {
   font-size: 13px;
-  font-weight: 600;
-  color: #334155;
+  font-weight: 700;
+  color: var(--gt-text-heading);
 }
 
 .missing-item-path {
   margin-top: 6px;
   font-family: Consolas, Monaco, monospace;
   font-size: 12px;
-  color: #475569;
+  color: var(--gt-text-main);
+  font-weight: 600;
   word-break: break-all;
-  background: #ffffff;
-  border: 1px dashed #cbd5e1;
+  background: var(--gt-surface);
+  border: 1px dashed var(--gt-border-strong);
   border-radius: 8px;
   padding: 8px;
 }
@@ -1318,9 +1493,9 @@ function convertToSubTypes(dt) {
 }
 
 .folder-migration-summary > div {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--gt-border);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--gt-surface);
   padding: 12px;
 }
 
@@ -1328,19 +1503,21 @@ function convertToSubTypes(dt) {
   display: block;
   font-size: 22px;
   font-weight: 700;
-  color: #7c3aed;
+  color: light-dark(#7c3aed, #d8b4fe);
   line-height: 1;
 }
 
 .summary-num.muted {
-  color: #64748b;
+  color: var(--gt-text-main);
+  font-weight: 600;
 }
 
 .summary-label {
   display: block;
   margin-top: 6px;
-  font-size: 12px;
-  color: #64748b;
+  font-size: 12.5px;
+  color: var(--gt-text-main);
+  font-weight: 600;
 }
 
 .folder-migration-list {
@@ -1353,9 +1530,9 @@ function convertToSubTypes(dt) {
 }
 
 .folder-migration-item {
-  border: 1px solid #ede9fe;
+  border: 1px solid light-dark(#ede9fe, var(--gt-border));
   border-radius: 10px;
-  background: #fbfaff;
+  background: light-dark(#fbfaff, var(--gt-surface-muted));
   padding: 12px;
 }
 
@@ -1365,16 +1542,16 @@ function convertToSubTypes(dt) {
   justify-content: space-between;
   gap: 10px;
   font-size: 13px;
-  font-weight: 600;
-  color: #334155;
+  font-weight: 700;
+  color: var(--gt-text-heading);
   margin-bottom: 8px;
 }
 
 .folder-migration-title span {
   flex-shrink: 0;
   font-size: 12px;
-  color: #7c3aed;
-  background: #ede9fe;
+  color: light-dark(#7c3aed, #d8b4fe);
+  background: light-dark(#ede9fe, #2d2445);
   border-radius: 999px;
   padding: 2px 8px;
 }
@@ -1389,24 +1566,25 @@ function convertToSubTypes(dt) {
 
 .path-line span {
   font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
+  font-weight: 700;
+  color: var(--gt-text-main);
 }
 
 .path-line code {
   display: block;
   font-family: Consolas, Monaco, monospace;
   font-size: 12px;
-  color: #475569;
+  color: var(--gt-text-main);
+  font-weight: 600;
   word-break: break-all;
-  background: #ffffff;
-  border: 1px dashed #ddd6fe;
+  background: var(--gt-surface);
+  border: 1px dashed light-dark(#ddd6fe, #654e90);
   border-radius: 8px;
   padding: 7px 8px;
 }
 
 .folder-migration-skipped {
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--gt-border-strong);
 }
 
 .skipped-list {
@@ -1416,38 +1594,39 @@ function convertToSubTypes(dt) {
 }
 
 .skipped-item {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--gt-border-strong);
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--gt-surface-subtle);
   padding: 10px;
 }
 
 .skipped-title {
   font-size: 13px;
-  font-weight: 600;
-  color: #334155;
+  font-weight: 700;
+  color: var(--gt-text-heading);
 }
 
 .skipped-reason {
   margin-top: 4px;
   font-size: 12px;
-  color: #7c3aed;
+  color: light-dark(#7c3aed, #d8b4fe);
 }
 
 .skipped-path {
   margin-top: 4px;
   font-family: Consolas, Monaco, monospace;
-  font-size: 11px;
-  color: #64748b;
+  font-size: 11.5px;
+  color: var(--gt-text-main);
+  font-weight: 600;
   word-break: break-all;
 }
 
 /* Reset section */
 .reset-section {
-  border: 1px solid #fecdd3;
+  border: 1px solid var(--gt-danger-border);
   border-radius: 12px;
   padding: 16px;
-  background: #fff5f5;
+  background: light-dark(#fff5f5, #352333);
 }
 
 /* Design type management */
@@ -1458,8 +1637,8 @@ function convertToSubTypes(dt) {
 }
 
 .dt-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--gt-surface-subtle);
+  border: 1px solid var(--gt-border-strong);
   border-radius: 10px;
   padding: 12px 14px;
 }
@@ -1482,8 +1661,9 @@ function convertToSubTypes(dt) {
 }
 
 .dt-sub-label {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: 12px;
+  color: var(--gt-text-main);
+  font-weight: 700;
   margin-bottom: 6px;
 }
 

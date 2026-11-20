@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      if (new URLSearchParams(location.search).get('appearanceMode') === 'dark') {
+        document.documentElement.classList.add('dark')
+      }
+    </script>
     <title>GradTrack - 毕设接单管理助手</title>
   </head>
   <body>

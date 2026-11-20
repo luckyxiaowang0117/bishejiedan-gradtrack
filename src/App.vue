@@ -97,7 +97,7 @@
 
       <div v-else class="empty-state">
         <div class="empty-icon-box">
-          <el-icon :size="48" color="#cbd5e1"><Files /></el-icon>
+          <el-icon :size="48" color="var(--gt-border-strong)"><Files /></el-icon>
         </div>
         <h2 class="empty-title">请在左侧选择一个项目</h2>
         <p class="empty-sub">或者点击左下角新建单子开始记录</p>
@@ -118,6 +118,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { applyAppearance } from './appearance.js'
 import LoginPage from './components/LoginPage.vue'
 import Sidebar from './components/Sidebar.vue'
 import OrderPanel from './components/OrderPanel.vue'
@@ -127,7 +128,9 @@ import SettingsModal from './components/SettingsModal.vue'
 import packageJson from '../package.json'
 
 const api = window.electronAPI
-const appVersion = packageJson.version
+const appVersion = import.meta.env.MODE === 'beta'
+  ? `${packageJson.version}（测试版）`
+  : packageJson.version
 
 const ORDER_TYPE_MAP = {
   thesis: '毕设论文',
@@ -715,6 +718,7 @@ function handleSelectOrder(id) {
 }
 
 function handleDataReset() {
+  applyAppearance('light')
   currentUser.value = null
   isLoggedIn.value = false
   forceRegister.value = true
@@ -833,7 +837,7 @@ watch([filter, sortMode, groupMode, titleMissingOnly], () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: rgba(248, 250, 252, 0.5);
+  background: color-mix(in srgb, var(--gt-surface-subtle) 50%, transparent);
 }
 
 .main-drag {
@@ -856,7 +860,7 @@ watch([filter, sortMode, groupMode, titleMissingOnly], () => {
   height: 100%;
   border: none;
   background: transparent;
-  color: #475569;
+  color: var(--gt-text-main);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -865,11 +869,11 @@ watch([filter, sortMode, groupMode, titleMissingOnly], () => {
 }
 
 .win-btn:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.08));
 }
 
 .win-btn:active {
-  background: rgba(0, 0, 0, 0.1);
+  background: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.12));
 }
 
 .win-btn-close:hover {
@@ -896,7 +900,7 @@ watch([filter, sortMode, groupMode, titleMissingOnly], () => {
   width: var(--gt-empty-icon-box);
   height: var(--gt-empty-icon-box);
   border-radius: 16px;
-  background: #f1f5f9;
+  background: var(--gt-surface-muted);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -906,13 +910,14 @@ watch([filter, sortMode, groupMode, titleMissingOnly], () => {
 
 .empty-title {
   font-size: var(--gt-empty-title-size);
-  font-weight: 500;
-  color: #475569;
+  font-weight: 700;
+  color: var(--gt-text-heading);
   margin-bottom: 8px;
 }
 
 .empty-sub {
   font-size: var(--gt-empty-sub-size);
-  color: #94a3b8;
+  color: var(--gt-text-main);
+  font-weight: 600;
 }
 </style>

@@ -32,6 +32,12 @@
 | 6.4.0 | `接单管理助手 Setup 6.4.0.exe` | 2026-10-12 |
 | 6.4.1 | `接单管理助手-6.4.1-arm64.dmg` | 2026-11-11 |
 | 6.4.1 | `gradtrack-setup-6.4.1.exe`（Windows x64） | 2026-11-11 |
+| 6.5.0 | `接单管理助手-6.5.0-arm64.dmg` | 2026-11-20 |
+
+## 6.5.0 更新说明
+
+- 新增浅色与深色切换、优化订单列表和详情布局，修复「本人」结算与周明细。
+- 安装包和完整说明见 [v6.5.0 GitHub Release](https://github.com/luckyxiaowang0117/bishejiedan-gradtrack/releases/tag/v6.5.0)。
 
 ## 6.4.1 更新说明
 

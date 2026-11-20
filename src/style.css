@@ -6,12 +6,9 @@
 
 :root {
   --gt-base-font-size: 14px;
-  --gt-shell-bg: #f8fafc;
   --gt-drag-height: 44px;
   --gt-topbar-height: 56px;
   --gt-sidebar-width: clamp(430px, 25vw, 540px);
-  --gt-sidebar-head-px: 20px;
-  --gt-sidebar-head-pb: 20px;
   --gt-sidebar-section-px: 16px;
   --gt-page-pad: 32px;
   --gt-page-pad-y: 32px;
@@ -25,9 +22,6 @@
   --gt-title-md: 16px;
   --gt-text-sm: 13px;
   --gt-text-xs: 12px;
-  --gt-filter-btn-height: 36px;
-  --gt-order-card-py: 14px;
-  --gt-order-card-px: 16px;
   --gt-empty-icon-box: 96px;
   --gt-empty-title-size: 18px;
   --gt-empty-sub-size: 13px;
@@ -40,12 +34,10 @@
 
 @media (max-width: 2200px), (max-height: 1180px) {
   :root {
-    --gt-base-font-size: 13px;
+    --gt-base-font-size: 13.5px;
     --gt-drag-height: 40px;
     --gt-topbar-height: 52px;
     --gt-sidebar-width: clamp(390px, 24vw, 480px);
-    --gt-sidebar-head-px: 18px;
-    --gt-sidebar-head-pb: 16px;
     --gt-sidebar-section-px: 14px;
     --gt-page-pad: 24px;
     --gt-page-pad-y: 24px;
@@ -57,14 +49,11 @@
     --gt-title-xl: 20px;
     --gt-title-lg: 17px;
     --gt-title-md: 15px;
-    --gt-text-sm: 12px;
-    --gt-text-xs: 11px;
-    --gt-filter-btn-height: 32px;
-    --gt-order-card-py: 12px;
-    --gt-order-card-px: 14px;
+    --gt-text-sm: 13px;
+    --gt-text-xs: 12px;
     --gt-empty-icon-box: 84px;
     --gt-empty-title-size: 17px;
-    --gt-empty-sub-size: 12px;
+    --gt-empty-sub-size: 13px;
     --gt-dialog-md: min(820px, calc(100vw - 24px));
     --gt-dialog-order: min(1020px, calc(100vw - 32px));
     --gt-dialog-lg: min(560px, calc(100vw - 24px));
@@ -78,8 +67,6 @@
     --gt-drag-height: 36px;
     --gt-topbar-height: 48px;
     --gt-sidebar-width: clamp(360px, 23vw, 420px);
-    --gt-sidebar-head-px: 16px;
-    --gt-sidebar-head-pb: 14px;
     --gt-sidebar-section-px: 12px;
     --gt-page-pad: 18px;
     --gt-page-pad-y: 18px;
@@ -91,14 +78,11 @@
     --gt-title-xl: 18px;
     --gt-title-lg: 16px;
     --gt-title-md: 14px;
-    --gt-text-sm: 12px;
-    --gt-text-xs: 11px;
-    --gt-filter-btn-height: 30px;
-    --gt-order-card-py: 10px;
-    --gt-order-card-px: 12px;
+    --gt-text-sm: 13px;
+    --gt-text-xs: 12px;
     --gt-empty-icon-box: 72px;
     --gt-empty-title-size: 16px;
-    --gt-empty-sub-size: 12px;
+    --gt-empty-sub-size: 13px;
     --gt-dialog-sm: min(400px, calc(100vw - 20px));
     --gt-dialog-md: min(760px, calc(100vw - 20px));
     --gt-dialog-order: min(920px, calc(100vw - 24px));
@@ -112,13 +96,17 @@ html, body, #root {
   overflow: hidden;
 }
 
+html {
+  background: var(--gt-shell-bg);
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text',
     'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
     'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   background: var(--gt-shell-bg);
-  color: #1e293b;
+  color: var(--gt-text-main);
   font-size: var(--gt-base-font-size);
 }
 
@@ -127,19 +115,19 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: var(--gt-surface-muted);
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--gt-border-strong);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: light-dark(#94a3b8, #767676);
 }
 
 ::selection {
-  background: #c7d2fe;
-  color: #312e81;
+  background: var(--gt-accent-border);
+  color: light-dark(#312e81, #ffffff);
 }
 
 .el-dialog {
@@ -147,12 +135,46 @@ body {
   max-width: calc(100vw - 24px) !important;
   margin: 0 auto;
 }
+.el-dialog__title {
+  font-weight: 600;
+}
 .el-message-box {
   border-radius: 16px !important;
-  max-width: calc(100vw - 24px) !important;
+  max-width: min(var(--el-messagebox-width, 420px), calc(100vw - 32px));
+}
+
+.el-button:is(.el-button--primary, .el-button--success, .el-button--warning, .el-button--danger):not(.is-plain, .is-text, .is-link, .is-disabled) {
+  --el-button-hover-bg-color: var(--el-button-active-bg-color);
+  --el-button-hover-border-color: var(--el-button-active-border-color);
+}
+
+.el-alert--info.is-light,
+.el-message--info {
+  --el-color-info: var(--gt-text-muted);
+}
+
+.el-alert--info.is-light .el-alert__title,
+.el-alert--info.is-light .el-alert__description,
+.el-alert--warning.is-light .el-alert__title,
+.el-alert--warning.is-light .el-alert__description,
+.el-message--info .el-message__content {
+  font-weight: 500;
+}
+
+.el-input__inner,
+.el-textarea__inner,
+.el-select__placeholder,
+.el-select-dropdown__item,
+.el-date-table th,
+.el-autocomplete-suggestion li {
+  font-weight: 500;
+}
+
+.el-date-table th {
+  color: var(--gt-text-muted);
 }
 
 .line-through-text {
   text-decoration: line-through;
-  color: #9ca3af;
+  color: var(--gt-text-muted);
 }

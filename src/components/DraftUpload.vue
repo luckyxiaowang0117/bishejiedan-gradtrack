@@ -2,7 +2,7 @@
   <div class="draft-upload">
     <div class="draft-header">
       <h3 class="draft-title">
-        <el-icon :size="18" color="#6366f1"><Document /></el-icon>
+        <el-icon :size="18" color="var(--gt-text-violet)"><Document /></el-icon>
         {{ orderType === 'translation' ? '译文交付' : '初稿交付' }}
       </h3>
       <div class="draft-header-actions">
@@ -16,7 +16,7 @@
     </div>
 
     <div v-if="!folderPath" class="draft-empty">
-      <el-icon :size="24" color="#cbd5e1"><FolderRemove /></el-icon>
+      <el-icon :size="24" color="var(--gt-border-strong)"><FolderRemove /></el-icon>
       <p>未关联项目文件夹，无法使用初稿交付功能。</p>
     </div>
 
@@ -29,7 +29,7 @@
       @drop.prevent.stop="onDrop"
     >
       <div v-if="files.length === 0 && !isDragOver" class="draft-placeholder">
-        <el-icon :size="32" color="#cbd5e1"><UploadFilled /></el-icon>
+        <el-icon :size="32" color="var(--gt-border-strong)"><UploadFilled /></el-icon>
         <p>拖拽{{ orderType === 'translation' ? '译文' : '初稿' }}文件到此区域，或点击右上角上传按钮</p>
       </div>
 
@@ -232,7 +232,7 @@ watch(() => props.folderPath, loadFiles, { immediate: true })
 .draft-title {
   font-size: 16px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--gt-text-body);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -247,11 +247,12 @@ watch(() => props.folderPath, loadFiles, { immediate: true })
 .draft-empty {
   text-align: center;
   padding: 24px;
-  background: #fff;
-  border: 1px dashed #cbd5e1;
+  background: var(--gt-surface);
+  border: 1px dashed var(--gt-border-strong);
   border-radius: 12px;
-  color: #94a3b8;
-  font-size: 13px;
+  color: var(--gt-text-main);
+  font-weight: 600;
+  font-size: 13.5px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -259,8 +260,8 @@ watch(() => props.folderPath, loadFiles, { immediate: true })
 }
 
 .draft-body {
-  background: #fff;
-  border: 1.5px solid #e2e8f0;
+  background: var(--gt-surface);
+  border: 1.5px solid var(--gt-border-strong);
   border-radius: 12px;
   padding: 16px;
   position: relative;
@@ -268,9 +269,9 @@ watch(() => props.folderPath, loadFiles, { immediate: true })
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .draft-body.is-drag-over {
-  border-color: #6366f1;
+  border-color: light-dark(#6366f1, #a5b4fc);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-  background: #eef2ff;
+  background: var(--gt-accent-surface);
 }
 
 .draft-placeholder {
@@ -280,7 +281,8 @@ watch(() => props.folderPath, loadFiles, { immediate: true })
   justify-content: center;
   gap: 8px;
   padding: 24px;
-  color: #94a3b8;
+  color: var(--gt-text-main);
+  font-weight: 600;
   font-size: 13px;
 }
 .draft-placeholder p {
@@ -298,8 +300,8 @@ watch(() => props.folderPath, loadFiles, { immediate: true })
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--gt-surface-subtle);
+  border: 1px solid var(--gt-border-strong);
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
@@ -308,16 +310,16 @@ watch(() => props.folderPath, loadFiles, { immediate: true })
   flex: 1;
 }
 .file-card:hover {
-  background: #eef2ff;
-  border-color: #c7d2fe;
+  background: var(--gt-accent-surface);
+  border-color: var(--gt-accent-border);
 }
 
 .file-icon-wrap {
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--gt-surface);
+  border: 1px solid var(--gt-border-strong);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -334,16 +336,17 @@ watch(() => props.folderPath, loadFiles, { immediate: true })
 
 .file-name {
   font-size: 13px;
-  font-weight: 500;
-  color: #334155;
+  font-weight: 700;
+  color: var(--gt-text-heading);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .file-meta {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--gt-text-main);
 }
 
 .file-actions {
@@ -361,13 +364,13 @@ watch(() => props.folderPath, loadFiles, { immediate: true })
   position: absolute;
   inset: 0;
   border-radius: 11px;
-  background: rgba(99, 102, 241, 0.08);
+  background: light-dark(rgba(99, 102, 241, 0.08), rgba(147, 197, 253, 0.18));
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #4f46e5;
+  color: light-dark(#4f46e5, #c7d2fe);
   font-size: 14px;
   font-weight: 500;
   pointer-events: none;

@@ -1,6 +1,6 @@
 {
   "name": "gradtrack",
-  "version": "6.4.1",
+  "version": "6.5.0",
   "description": "毕设接单管理助手 - 本地桌面端项目管理工具",
   "main": "electron/main.js",
   "scripts": {
@@ -9,6 +9,7 @@
     "dev:electron": "wait-on http://localhost:5173 && npx electron .",
     "build": "vite build && electron-builder",
     "build:mac": "vite build && electron-builder --mac",
+    "build:mac:test": "vite build --mode beta && electron-builder --mac dmg --arm64 -c.appId=com.gradtrack.app.test -c.extraMetadata.name=gradtrack-test -c.productName='接单管理助手（测试版）' -c.directories.output=release/test -c.mac.identity=-",
     "build:win": "vite build && electron-builder --win"
   },
   "build": {

@@ -1,0 +1,181 @@
+:root {
+  color-scheme: light;
+  --gt-shell-bg: #f8fafc;
+  --gt-surface: #ffffff;
+  --gt-surface-subtle: #f8fafc;
+  --gt-surface-muted: #f1f5f9;
+  --gt-surface-raised: #e2e8f0;
+  --gt-border: #e2e8f0;
+  --gt-border-strong: #cbd5e1;
+  --gt-text-heading: #000000;
+  --gt-text-main: #0f172a;
+  --gt-text-body: #1e293b;
+  --gt-text-muted: #475569;
+  --gt-text-accent: #1d4ed8;
+  --gt-text-success: #047857;
+  --gt-text-warning: #92400e;
+  --gt-text-danger: #b91c1c;
+  --gt-text-violet: #4338ca;
+  --gt-accent-surface: #eef2ff;
+  --gt-accent-surface-strong: #e0e7ff;
+  --gt-accent-border: #c7d2fe;
+  --gt-success-surface: #ecfdf5;
+  --gt-success-border: #a7f3d0;
+  --gt-warning-surface: #fffbeb;
+  --gt-warning-border: #fde68a;
+  --gt-danger-surface: #fef2f2;
+  --gt-danger-border: #fecaca;
+  --gt-type-thesis: #4338ca;
+  --gt-type-format: #0369a1;
+  --gt-type-translation: #92400e;
+  --gt-type-design: #6d28d9;
+  --gt-type-reduction: #047857;
+  --gt-type-special: #b91c1c;
+  --gt-type-on: #ffffff;
+  --gt-action-accent: #1d4ed8;
+  --gt-action-success: #047857;
+  --gt-action-warning: #92400e;
+  --gt-action-danger: #b91c1c;
+  --el-color-primary-dark-2: #1e3a8a;
+  --el-color-success-dark-2: #065f46;
+  --el-color-warning-dark-2: #652f0f;
+  --el-color-danger-dark-2: #991b1b;
+  --el-color-error-dark-2: #991b1b;
+}
+
+:root.dark {
+  color-scheme: dark;
+  --gt-shell-bg: #0d0d0d;
+  --gt-surface: #171717;
+  --gt-surface-subtle: #121212;
+  --gt-surface-muted: #222222;
+  --gt-surface-raised: #2b2b2b;
+  --gt-border: #343434;
+  --gt-border-strong: #515151;
+  --gt-text-heading: #fafafa;
+  --gt-text-main: #f2f2f2;
+  --gt-text-body: #e6e6e6;
+  --gt-text-muted: #b3b3b3;
+  --gt-text-accent: #93c5fd;
+  --gt-text-success: #86efac;
+  --gt-text-warning: #fcd58a;
+  --gt-text-danger: #fda4af;
+  --gt-text-violet: #c7d2fe;
+  --gt-accent-surface: #252525;
+  --gt-accent-surface-strong: #303030;
+  --gt-accent-border: #555555;
+  --gt-success-surface: #19271e;
+  --gt-success-border: #376652;
+  --gt-warning-surface: #322719;
+  --gt-warning-border: #765529;
+  --gt-danger-surface: #322124;
+  --gt-danger-border: #824553;
+  --gt-type-thesis: #c7d2fe;
+  --gt-type-format: #91d5ff;
+  --gt-type-translation: #fcd58a;
+  --gt-type-design: #d8b4fe;
+  --gt-type-reduction: #86efac;
+  --gt-type-special: #fda4af;
+  --gt-type-on: #141414;
+  --el-bg-color: var(--gt-surface);
+  --el-bg-color-page: var(--gt-shell-bg);
+  --el-bg-color-overlay: var(--gt-surface-muted);
+  --el-fill-color-blank: var(--gt-surface);
+  --el-fill-color: var(--gt-surface-muted);
+  --el-fill-color-light: var(--gt-surface-muted);
+  --el-fill-color-lighter: var(--gt-surface-subtle);
+  --el-fill-color-extra-light: var(--gt-surface-subtle);
+  --el-fill-color-dark: var(--gt-surface-raised);
+  --el-border-color: var(--gt-border-strong);
+  --el-border-color-light: var(--gt-border);
+  --el-border-color-lighter: var(--gt-border);
+  --el-border-color-extra-light: var(--gt-border);
+  --el-color-info-light-9: var(--gt-surface-muted);
+  --el-disabled-bg-color: var(--gt-surface-muted);
+  --el-disabled-text-color: #888888;
+}
+
+:root,
+:root.dark {
+  --el-text-color-primary: var(--gt-text-main);
+  --el-text-color-regular: var(--gt-text-body);
+  --el-text-color-secondary: var(--gt-text-muted);
+  --el-text-color-placeholder: var(--gt-text-muted);
+  --el-color-primary: var(--gt-text-accent);
+  --el-color-success: var(--gt-text-success);
+  --el-color-warning: var(--gt-text-warning);
+  --el-color-danger: var(--gt-text-danger);
+  --el-color-error: var(--gt-text-danger);
+}
+
+:root.dark .el-radio-button {
+  --el-radio-button-checked-bg-color: var(--gt-action-accent);
+  --el-radio-button-checked-border-color: var(--gt-text-accent);
+}
+
+:root.dark .el-checkbox {
+  --el-checkbox-checked-bg-color: var(--gt-action-accent);
+  --el-checkbox-checked-input-border-color: var(--gt-text-accent);
+}
+
+:root.dark .el-switch {
+  --el-switch-on-color: var(--gt-action-accent);
+  --el-switch-off-color: var(--gt-border-strong);
+}
+
+:root.dark .el-button--primary { --gt-button-fill: var(--gt-action-accent); }
+:root.dark .el-button--success { --gt-button-fill: var(--gt-action-success); }
+:root.dark .el-button--warning { --gt-button-fill: var(--gt-action-warning); }
+:root.dark .el-button--danger { --gt-button-fill: var(--gt-action-danger); }
+
+:root.dark .el-button:is(.el-button--primary, .el-button--success, .el-button--warning, .el-button--danger):not(.is-disabled, .is-plain, .is-text, .is-link) {
+  --el-button-bg-color: var(--gt-button-fill);
+  --el-button-border-color: var(--gt-button-fill);
+  --el-button-active-bg-color: color-mix(in srgb, var(--gt-button-fill), #000 20%);
+  --el-button-active-border-color: var(--el-button-active-bg-color);
+}
+
+:root.dark .el-button.is-plain:not(.is-disabled) {
+  --el-button-hover-text-color: var(--gt-text-main);
+  --el-button-hover-bg-color: var(--gt-surface-raised);
+  --el-button-active-text-color: var(--gt-text-main);
+  --el-button-active-bg-color: var(--gt-surface-muted);
+}
+
+:root {
+  --gt-status-pending-text: light-dark(#78350f, #ffe0a6);
+}
+
+.design-status--pending {
+  --gt-design-status-text: var(--gt-status-pending-text);
+  --gt-design-status-surface: var(--gt-warning-surface);
+  --gt-design-status-border: var(--gt-warning-border);
+}
+
+.design-status--complete {
+  --gt-design-status-text: light-dark(#065f46, #a7f3c2);
+  --gt-design-status-surface: var(--gt-success-surface);
+  --gt-design-status-border: var(--gt-success-border);
+}
+
+.design-status--neutral {
+  --gt-design-status-text: var(--gt-text-main);
+  --gt-design-status-surface: var(--gt-surface-muted);
+  --gt-design-status-border: var(--gt-border-strong);
+}
+
+.design-status-menu .el-dropdown-menu__item {
+  color: var(--gt-design-status-text);
+  font-weight: 600;
+}
+
+.design-status-menu .el-dropdown-menu__item.is-active,
+.design-status-menu .el-dropdown-menu__item:not(.is-disabled):focus,
+.design-status-menu .el-dropdown-menu__item:not(.is-disabled):hover {
+  background: var(--gt-design-status-surface);
+  color: var(--gt-design-status-text);
+}
+
+.design-status-menu .el-dropdown-menu__item.is-active {
+  box-shadow: inset 3px 0 var(--gt-design-status-text);
+}
