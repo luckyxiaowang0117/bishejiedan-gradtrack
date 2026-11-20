@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-- 应用版本：`6.5.1`
+- 应用版本：`6.5.2`
 - 技术栈：`Vue 3`、`Vite`、`Electron`、`better-sqlite3`
 
 ## 开发命令
@@ -15,6 +15,13 @@ npm run dev
 npm run build:mac -- --arm64
 npm run build:win
 ```
+
+## 6.5.2 更新说明
+
+- 登录与注册页面加入「轨道环」动态背景。光点沿多层轨道移动，背景随浅色与深色外观切换。
+- 开启系统「减少动态效果」时，背景显示静止的轨道和光点。
+
+macOS Apple 芯片版安装包见 [v6.5.2 GitHub Release](https://github.com/luckyxiaowang0117/bishejiedan-gradtrack/releases/tag/v6.5.2)。
 
 ## 6.5.1 更新说明
 

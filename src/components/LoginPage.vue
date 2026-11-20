@@ -1,9 +1,6 @@
 <template>
   <div class="login-wrapper">
-    <!-- Animated background orbs -->
-    <div class="bg-orb orb-1" />
-    <div class="bg-orb orb-2" />
-    <div class="bg-orb orb-3" />
+    <LoginOrbitBackground />
 
     <!-- Title bar drag region -->
     <div class="login-drag-region">
@@ -111,6 +108,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import LoginOrbitBackground from './LoginOrbitBackground.vue'
 
 const props = defineProps({
   forceRegister: Boolean,
@@ -234,16 +232,12 @@ async function handleRegister() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg,
-    light-dark(#f8fafc, var(--gt-shell-bg)) 0%,
-    light-dark(#eef2ff, var(--gt-shell-bg)) 40%,
-    light-dark(#e0e7ff, var(--gt-surface-subtle)) 70%,
-    light-dark(#f1f5f9, var(--gt-surface-subtle)) 100%);
+  background: radial-gradient(ellipse at 49% 49%, #f3f1ff 2%, #e3e9ff 65%, #ced9f9 100%);
   overflow: hidden;
 }
 
-:global(html.dark .login-wrapper .bg-orb) {
-  display: none;
+:global(html.dark .login-wrapper) {
+  background: radial-gradient(ellipse at 48% 48%, #262548, #11172e 49%, #070d1c 100%);
 }
 
 .login-drag-region {
@@ -289,52 +283,12 @@ async function handleRegister() {
   color: #fff;
 }
 
-/* Animated background orbs */
-.bg-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.3;
-  animation: float 20s ease-in-out infinite;
-}
-.orb-1 {
-  width: 400px;
-  height: 400px;
-  background: #6366f1;
-  top: -100px;
-  left: -100px;
-  animation-delay: 0s;
-}
-.orb-2 {
-  width: 300px;
-  height: 300px;
-  background: #8b5cf6;
-  bottom: -80px;
-  right: -60px;
-  animation-delay: -7s;
-}
-.orb-3 {
-  width: 200px;
-  height: 200px;
-  background: #a78bfa;
-  top: 50%;
-  left: 60%;
-  animation-delay: -14s;
-}
-
-@keyframes float {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(30px, -40px) scale(1.05); }
-  50% { transform: translate(-20px, 20px) scale(0.95); }
-  75% { transform: translate(15px, 35px) scale(1.02); }
-}
-
 /* Card */
 .login-card {
   position: relative;
   width: 400px;
   padding: 40px 36px 32px;
-  background: light-dark(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.07));
+  background: light-dark(rgba(255, 255, 255, 0.92), rgba(15, 21, 34, 0.93));
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid light-dark(#dbe4fa, rgba(255, 255, 255, 0.12));

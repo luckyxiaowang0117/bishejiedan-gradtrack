@@ -34,6 +34,12 @@
 | 6.4.1 | `gradtrack-setup-6.4.1.exe`（Windows x64） | 2026-11-11 |
 | 6.5.0 | `接单管理助手-6.5.0-arm64.dmg` | 2026-11-20 |
 | 6.5.1 | `gradtrack-6.5.1-arm64.dmg`（macOS Apple 芯片版） | 2026-11-20 |
+| 6.5.2 | `gradtrack-6.5.2-arm64.dmg`（macOS Apple 芯片版） | 2026-11-20 |
+
+## 6.5.2 更新说明
+
+- 登录与注册新增「轨道环」动态背景，适配浅色、深色和系统「减少动态效果」设置。
+- 安装包和完整说明见 [v6.5.2 GitHub Release](https://github.com/luckyxiaowang0117/bishejiedan-gradtrack/releases/tag/v6.5.2)。
 
 ## 6.5.1 更新说明
 
