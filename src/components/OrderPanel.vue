@@ -403,6 +403,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { formatOrderCreatedAt } from '../orderCreatedAt.mjs'
+import { useAccountWork } from '../useAccountWork.js'
 import { orderTypeMeta as orderTypeMap } from '../orderTypeMeta.js'
 import { designStatusClass } from '../designStatus.js'
 import RevisionTracker from './RevisionTracker.vue'
@@ -425,8 +426,14 @@ const deletePassword = ref('')
 const deletePasswordInput = ref(null)
 const deleteError = ref('')
 const deleting = ref(false)
+const saveAccountWork = useAccountWork({ isBusy: () => deleting.value })
 const emit = defineEmits(['updated', 'edit', 'deleted'])
 const api = window.electronAPI
+
+function updateCurrentOrder(changes) {
+  const { currentUser, order } = props
+  return saveAccountWork(() => api.updateOrder(currentUser.id, order.id, changes))
+}
 
 function openRevisions() {
   revisionsOpened.value = true
@@ -484,7 +491,7 @@ const availableDesignStatuses = computed(() => {
 
 async function handleDesignStatusChange(status) {
   if (!props.currentUser || !props.currentUser.id) return
-  await api.updateOrder(props.currentUser.id, props.order.id, { designStatus: status })
+  await updateCurrentOrder({ designStatus: status })
   emit('updated')
 }
 
@@ -576,7 +583,7 @@ async function handlePayHandler(forceAdjust = false) {
         return
       }
 
-      await api.updateOrder(props.currentUser.id, props.order.id, { handlerPaidAmount: newTotal })
+      await updateCurrentOrder({ handlerPaidAmount: newTotal })
       emit('updated')
       ElMessage.success(`已付处理人金额已调整为 ¥${newTotal}`)
     } else {
@@ -599,7 +606,7 @@ async function handlePayHandler(forceAdjust = false) {
       const amount = parseFloat(amountInput)
       const newTotal = current + amount
 
-      await api.updateOrder(props.currentUser.id, props.order.id, { handlerPaidAmount: newTotal })
+      await updateCurrentOrder({ handlerPaidAmount: newTotal })
       emit('updated')
       ElMessage.success(`已支付 ¥${amount}，累计已付 ¥${newTotal}`)
     }
@@ -621,7 +628,7 @@ async function handleRefund() {
     )
     const amount = parseFloat(value)
     if (!props.currentUser || !props.currentUser.id) return
-    await api.updateOrder(props.currentUser.id, props.order.id, { refundAmount: amount })
+    await updateCurrentOrder({ refundAmount: amount })
     emit('updated')
     ElMessage.success(amount > 0 ? `已记录退款 ¥${amount}` : '已清除退款记录')
   } catch {}
@@ -647,7 +654,7 @@ async function handleSettleBalance() {
         cancelButtonText: '取消',
       }
     )
-    await api.updateOrder(props.currentUser.id, props.order.id, { paidAmount: total })
+    await updateCurrentOrder({ paidAmount: total })
     emit('updated')
     ElMessage.success('尾款已结清')
   } catch {}

@@ -57,14 +57,19 @@
               <el-icon :size="18" color="var(--gt-text-accent)"><FolderOpened /></el-icon>
               <div>
                 <div class="section-title">项目文件夹根目录</div>
-                <div class="section-desc">新建订单时，将在此目录下自动创建专属项目文件夹</div>
+                <div class="section-desc">账号 {{ currentUser?.username }} 的新建订单使用此目录。</div>
               </div>
             </div>
             <div class="dir-row">
-              <el-input :model-value="rootDir" readonly placeholder="未设置" />
-              <el-button type="primary" plain @click="handleSelectDir">
+              <el-input :model-value="rootDir" readonly placeholder="当前账号未设置项目根目录" aria-label="项目文件夹根目录" />
+              <el-button type="primary" plain :disabled="accountWorkBusy" @click="selectAccountDirectory('rootDirectory')">
                 <el-icon><FolderOpened /></el-icon> 选择目录
               </el-button>
+            </div>
+            <div v-if="legacyDirectories.rootDirectory" class="legacy-directory">
+              <strong>旧项目根目录待确认归属</strong>
+              <span>{{ legacyDirectories.rootDirectory }}</span>
+              <el-button link type="primary" :disabled="accountWorkBusy" @click="claimLegacyDirectory('rootDirectory')">归属当前账号</el-button>
             </div>
             <el-alert v-if="!rootDir" title="建议在创建第一个订单前配置此项，否则不会自动生成项目文件夹。" type="warning" show-icon :closable="false" class="settings-alert" />
           </div>
@@ -148,15 +153,20 @@
               <el-icon :size="18" color="var(--gt-text-success)"><RefreshRight /></el-icon>
               <div>
                 <div class="section-title">一键同步（Syncthing）</div>
-                <div class="section-desc">先等 Syncthing 完成目录同步，再点击这里将交换目录中的变更与本机数据库对账合并</div>
+                <div class="section-desc">账号 {{ currentUser?.username }} 使用独立的同步目录。请先等 Syncthing 完成目录同步。</div>
               </div>
             </div>
 
             <div class="dir-row">
-              <el-input :model-value="syncDir" readonly placeholder="未设置同步目录" />
-              <el-button type="primary" plain @click="handleSelectSyncDir">
+              <el-input :model-value="syncDir" readonly placeholder="当前账号未设置同步目录" aria-label="Syncthing 同步目录" />
+              <el-button type="primary" plain :disabled="accountWorkBusy" @click="selectAccountDirectory('syncDirectory')">
                 <el-icon><FolderOpened /></el-icon> 选择目录
               </el-button>
+            </div>
+            <div v-if="legacyDirectories.syncDirectory" class="legacy-directory">
+              <strong>旧共享同步目录待确认归属</strong>
+              <span>{{ legacyDirectories.syncDirectory }}</span>
+              <el-button link type="primary" :disabled="accountWorkBusy" @click="claimLegacyDirectory('syncDirectory')">归属当前账号</el-button>
             </div>
 
             <div class="sync-meta-grid">
@@ -180,7 +190,7 @@
 
             <div class="sync-summary">
               <div class="sync-summary-title">同步状态说明</div>
-              <div class="sync-summary-text">{{ syncOverview.summary?.text || '自上次同步后，本机暂无重要新增记录' }}</div>
+              <div class="sync-summary-text">{{ syncOverview.summary?.text || '当前账号暂无待导出的重要记录' }}</div>
               <div v-if="(syncOverview.summary?.details || []).length > 0" class="sync-summary-list">
                 <div v-for="detail in syncOverview.summary.details" :key="detail.title" class="sync-summary-item">
                   <span class="sync-summary-item-title">{{ detail.title }} {{ detail.count }} 条</span>
@@ -190,7 +200,7 @@
             </div>
 
             <div class="migration-actions">
-              <el-button type="success" :loading="syncBusy" @click="handleRunSync">
+              <el-button type="success" :loading="syncBusy" :disabled="accountWorkBusy" @click="handleRunSync">
                 <el-icon><RefreshRight /></el-icon> 立即同步
               </el-button>
               <el-button plain :disabled="syncBusy" @click="loadSyncOverview">刷新状态</el-button>
@@ -297,8 +307,38 @@
           </div>
         </div>
 
-        <!-- 6. 安全与重置 -->
-        <div v-show="currentTab === 'security'" class="settings-tab-panel">
+        <div v-show="currentTab === 'account'" class="settings-tab-panel">
+          <div class="settings-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-text-accent)"><User /></el-icon>
+              <div>
+                <div class="section-title">当前账号</div>
+                <div class="settings-account-name">{{ currentUser?.username }}</div>
+              </div>
+            </div>
+            <div class="settings-account-actions">
+              <el-button type="primary" :disabled="accountWorkBusy" @click="$emit('switch-account')">切换账号</el-button>
+              <el-button :disabled="accountWorkBusy" @click="$emit('create-account')">新建账号</el-button>
+              <el-button :disabled="accountWorkBusy" @click="$emit('logout')">退出登录</el-button>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header">
+              <el-icon :size="18" color="var(--gt-text-accent)"><Clock /></el-icon>
+              <div>
+                <div class="section-title">本机近期账号</div>
+                <div class="section-desc">移除记忆后，仍可输入账号和密码登录。</div>
+              </div>
+            </div>
+            <div v-for="name in recentAccounts" :key="name" class="settings-account-row">
+              <strong :title="name">{{ name }}</strong>
+              <span v-if="name === currentUser?.username">当前账号</span>
+              <el-button v-else link type="primary" :disabled="accountWorkBusy" @click="$emit('switch-account', name)">切换到此账号</el-button>
+              <el-button link :disabled="accountWorkBusy" @click="$emit('forget-account', name)">移除记忆</el-button>
+            </div>
+            <p v-if="!recentAccounts.length" class="section-desc">暂无本机近期账号</p>
+          </div>
           <!-- Section 3: Privacy Protection -->
           <div class="settings-section privacy-section">
             <div class="section-header">
@@ -352,7 +392,9 @@
             </el-form>
           </div>
 
-          <!-- Section 10: Reset Data -->
+        </div>
+
+        <div v-show="currentTab === 'security'" class="settings-tab-panel">
           <div class="settings-section reset-section">
             <div class="section-header">
               <el-icon :size="18" color="var(--gt-text-danger)"><WarnTriangleFilled /></el-icon>
@@ -370,7 +412,7 @@
     </div>
 
     <template #footer>
-      <el-button type="primary" @click="handleFinish">完成</el-button>
+      <el-button type="primary" :disabled="accountWorkBusy" @click="handleFinish">完成</el-button>
     </template>
   </el-dialog>
 
@@ -485,14 +527,24 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { designStatusClass } from '../designStatus.js'
 import { appearanceMode, applyAppearance } from '../appearance.js'
+import { accountDirectoryError } from '../accountDirectoryErrors.js'
 
-const props = defineProps({ visible: Boolean, currentUser: Object })
-const emit = defineEmits(['update:visible', 'reset', 'imported', 'order-info-default-change'])
+const props = defineProps({
+  visible: Boolean,
+  currentUser: Object,
+  initialTab: { type: String, default: 'general' },
+  recentAccounts: { type: Array, default: () => [] },
+})
+const emit = defineEmits([
+  'update:visible', 'reset', 'imported', 'synced', 'order-info-default-change',
+  'switch-account', 'create-account', 'logout', 'forget-account',
+])
 
 const api = window.electronAPI
 const currentTab = ref('general')
 const savingAppearance = ref(false)
 const settingTabs = [
+  { key: 'account', label: '账号与登录', icon: 'User' },
   { key: 'general', label: '基础偏好', icon: 'Setting' },
   { key: 'orderCode', label: '编号规则', icon: 'SetUp' },
   { key: 'sync', label: '数据同步', icon: 'RefreshRight' },
@@ -502,6 +554,8 @@ const settingTabs = [
 ]
 const rootDir = ref('')
 const syncDir = ref('')
+const legacyDirectories = ref({})
+const directoryBusy = ref(false)
 const autoLaunch = ref(false)
 const requirePasswordOnStartup = ref(false)
 const requirePasswordOnTrayRestore = ref(false)
@@ -531,12 +585,17 @@ const missingOrderFolders = ref([])
 const syncOverview = ref({
   status: '未设置同步目录',
   lastSyncAt: '',
-  summary: { totalCount: 0, details: [], text: '自上次同步后，本机暂无重要新增记录' },
+  summary: { totalCount: 0, details: [], text: '当前账号暂无待导出的重要记录' },
   hint: '',
 })
 
 const pwdForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const pwdLoading = ref(false)
+const settingsLoading = ref(false)
+const settingsSaving = ref(false)
+const accountWorkBusy = computed(() => settingsLoading.value || settingsSaving.value || syncBusy.value
+  || migrationBusy.value || folderMigrationBusy.value || savingAppearance.value || pwdLoading.value || directoryBusy.value)
+defineExpose({ accountWorkBusy, savePendingSettings })
 const dialogVisible = computed({
   get: () => props.visible,
   set: (value) => emit('update:visible', value),
@@ -625,9 +684,7 @@ async function handleChangePassword() {
 }
 
 async function loadData() {
-  const val = await api.getSetting('rootDirectory')
-  rootDir.value = val || ''
-  syncDir.value = await api.getSetting('syncDirectory') || ''
+  if (props.currentUser?.id) setDirectoryView(await api.getAccountDirectories(props.currentUser.id))
   requirePasswordOnStartup.value = await api.getSetting('requirePasswordOnStartup') === '1'
   requirePasswordOnTrayRestore.value = await api.getSetting('requirePasswordOnTrayRestore') === '1'
   orderInfoDefaultExpanded.value = await api.getSetting('orderInfoDefaultExpanded') === '1'
@@ -646,12 +703,20 @@ async function loadData() {
   await loadSyncOverview()
 }
 
-watch(() => props.visible, (val) => {
+watch(() => props.visible, async (val) => {
   if (val) {
-    loadData()
+    currentTab.value = props.initialTab
     resetPwdForm()
+    settingsLoading.value = true
+    try {
+      await loadData()
+    } catch {
+      ElMessage.error('无法读取设置，请关闭后重试')
+    } finally {
+      settingsLoading.value = false
+    }
   }
-})
+}, { immediate: true })
 
 async function handleAutoLaunchChange(val) {
   await api.setAutoLaunch(val)
@@ -727,14 +792,27 @@ async function persistPendingChanges() {
   await loadData()
 }
 
+async function savePendingSettings() {
+  if (accountWorkBusy.value) return false
+  if (!props.visible) return true
+  settingsSaving.value = true
+  try {
+    await persistPendingChanges()
+    return true
+  } catch {
+    ElMessage.error('暂时无法保存设置，请重试')
+    return false
+  } finally {
+    settingsSaving.value = false
+  }
+}
+
 async function beforeDialogClose(done) {
-  await persistPendingChanges()
-  done()
+  if (await savePendingSettings()) done()
 }
 
 async function handleFinish() {
-  await persistPendingChanges()
-  emit('update:visible', false)
+  if (await savePendingSettings()) emit('update:visible', false)
 }
 
 async function handleReset() {
@@ -766,31 +844,81 @@ async function handleReset() {
   } catch {}
 }
 
-async function handleSelectDir() {
-  const dir = await api.selectDirectory()
-  if (dir) {
-    rootDir.value = dir
-    await api.setSetting('rootDirectory', dir)
-  }
+function setDirectoryView(directories) {
+  rootDir.value = directories.rootDirectory || ''
+  syncDir.value = directories.syncDirectory || ''
+  legacyDirectories.value = directories.legacy || {}
 }
 
 async function loadSyncOverview() {
   if (!props.currentUser?.id) return
   syncOverview.value = await api.getSyncOverview(props.currentUser.id)
-  syncDir.value = syncOverview.value?.syncDirectory || syncDir.value || ''
+  syncDir.value = syncOverview.value?.syncDirectory || ''
 }
 
-async function handleSelectSyncDir() {
-  const dir = await api.selectDirectory()
-  if (!dir) return
-  syncDir.value = dir
-  await api.setSetting('syncDirectory', dir)
-  await loadSyncOverview()
-  ElMessage.success('同步目录已更新')
+const directoryLabels = {
+  rootDirectory: '项目根目录',
+  syncDirectory: 'Syncthing 同步目录',
+}
+
+async function updateAccountDirectory(kind, useLegacy) {
+  const user = props.currentUser
+  if (!user?.id || accountWorkBusy.value) return
+  directoryBusy.value = true
+  try {
+    let result
+    if (useLegacy) {
+      const legacy = legacyDirectories.value[kind]
+      if (!legacy) return
+      const prior = kind === 'syncDirectory' ? syncDir.value : rootDir.value
+      const details = [
+        `当前账号：${user.username}`,
+        `旧目录：${legacy}`,
+        prior && prior !== legacy ? `将替换该账号目前设置的目录：${prior}` : '',
+        kind === 'syncDirectory' ? '请确认旧同步池属于当前账号。旧的已导入记录和同步时间也会归入此账号。' : '',
+        '已有订单文件会留在原处。',
+      ].filter(Boolean)
+      try {
+        await ElMessageBox.confirm(
+          details.join('\n'),
+          '确认旧目录归属',
+          { confirmButtonText: '确认归属', cancelButtonText: '取消', type: 'warning', closeOnClickModal: false },
+        )
+      } catch {
+        return
+      }
+      if (props.currentUser?.id !== user.id) return
+      result = await api.claimLegacyDirectory(user.id, kind)
+    } else {
+      const directory = await api.selectDirectory()
+      if (!directory || props.currentUser?.id !== user.id) return
+      result = await api.setAccountDirectory(user.id, kind, directory)
+    }
+    if (!result?.success) {
+      ElMessage.warning(accountDirectoryError(result, '无法保存账号目录，请重试'))
+      return
+    }
+    setDirectoryView(result)
+    await loadSyncOverview()
+    ElMessage.success(useLegacy ? '已确认旧目录归属' : `当前账号的${directoryLabels[kind]}已更新`)
+  } catch {
+    ElMessage.error('无法读取或保存账号目录，请重试')
+  } finally {
+    directoryBusy.value = false
+  }
+}
+
+function selectAccountDirectory(kind) {
+  return updateAccountDirectory(kind, false)
+}
+
+function claimLegacyDirectory(kind) {
+  return updateAccountDirectory(kind, true)
 }
 
 async function handleRunSync() {
-  if (!props.currentUser?.id) {
+  const user = props.currentUser
+  if (!user?.id) {
     ElMessage.error('未获取到当前用户，请重新登录后重试')
     return
   }
@@ -798,20 +926,20 @@ async function handleRunSync() {
     ElMessage.warning('请先设置同步目录')
     return
   }
+  if (accountWorkBusy.value) return
   syncBusy.value = true
   try {
-    const result = await api.runSync(props.currentUser.id)
+    const result = await api.runSync(user.id)
     if (!result?.success) {
-      const errorTextMap = {
-        INVALID_USER: '当前用户无效，请重新登录',
-        SYNC_DIR_NOT_SET: '请先设置同步目录',
-      }
-      ElMessage.error(errorTextMap[result?.error] || result?.error || '同步失败')
+      ElMessage.error(accountDirectoryError(result, '同步失败，请重试'))
       return
     }
     syncOverview.value = result.overview || syncOverview.value
     syncDir.value = syncOverview.value?.syncDirectory || syncDir.value
+    emit('synced')
     ElMessage.success(`同步完成：导入 ${result.imported} 条，导出 ${result.exported} 条`)
+  } catch {
+    ElMessage.error('同步失败，请重试')
   } finally {
     syncBusy.value = false
   }
@@ -872,7 +1000,8 @@ async function handleImportMigration() {
       ElMessage.error(errorTextMap[result.error] || result.error || '导入失败')
       return
     }
-    rootDir.value = newRoot
+    setDirectoryView(await api.getAccountDirectories(props.currentUser.id))
+    await loadSyncOverview()
     const missing = (result.missingPaths || []).length
     const missingList = Array.isArray(result.missingOrderFolders) ? result.missingOrderFolders : []
     ElMessage.success(`导入成功：${result.summary.orderCount} 个订单${missing ? `，${missing} 条路径未找到` : ''}`)
@@ -1053,6 +1182,24 @@ function convertToSubTypes(dt) {
 </script>
 
 <style scoped>
+.legacy-directory {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--gt-warning-border);
+  border-radius: 8px;
+  background: var(--gt-warning-surface);
+  color: var(--gt-text-main);
+  overflow-wrap: anywhere;
+}
+.settings-account-name { margin-top: 4px; color: var(--gt-text-heading); font-weight: 700; overflow-wrap: anywhere; }
+.settings-account-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.settings-account-actions .el-button { margin: 0; }
+.settings-account-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--gt-border); }
+.settings-account-row strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-account-row .el-button { margin: 0; }
 .settings-modal-layout {
   display: flex;
   height: min(480px, calc(100vh - 144px));

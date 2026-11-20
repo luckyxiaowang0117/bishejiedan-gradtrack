@@ -114,6 +114,13 @@ function createTables() {
       eventId TEXT PRIMARY KEY,
       appliedAt DATETIME DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS AccountSyncAppliedEvents (
+      userId INTEGER NOT NULL REFERENCES Users(id) ON DELETE CASCADE,
+      eventId TEXT NOT NULL,
+      appliedAt DATETIME DEFAULT (datetime('now')),
+      PRIMARY KEY (userId, eventId)
+    );
   `)
   runMigrations()
   seedDesignTypes()

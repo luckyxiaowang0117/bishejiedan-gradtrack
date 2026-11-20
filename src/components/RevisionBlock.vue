@@ -270,6 +270,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useAccountWork } from '../useAccountWork.js'
 
 const props = defineProps({ revision: Object, projectFoldersRef: Object })
 const emit = defineEmits(['changed'])
@@ -284,6 +285,9 @@ const isInputDragOver = ref(false)
 const editingItemId = ref(null)
 const editingContent = ref('')
 const autoSplitLines = ref(true)
+const saveAccountWork = useAccountWork({
+  hasDraft: () => inputText.value.trim() || pendingFiles.value.length > 0 || editingItemId.value !== null,
+})
 
 function startEdit(item) {
   editingItemId.value = item.id
@@ -302,7 +306,7 @@ async function saveEdit(id) {
     return
   }
   try {
-    await api.updateFeedback(id, content)
+    await saveAccountWork(() => api.updateFeedback(id, content))
     editingItemId.value = null
     editingContent.value = ''
     emit('changed')
@@ -316,9 +320,9 @@ async function resolveAllItems() {
   const unresolved = items.value.filter(i => !i.isResolved)
   if (unresolved.length === 0) return
   try {
-    for (const item of unresolved) {
-      await api.toggleFeedbackResolved(item.id)
-    }
+    await saveAccountWork(async () => {
+      for (const item of unresolved) await api.toggleFeedbackResolved(item.id)
+    })
     emit('changed')
     ElMessage.success(`已全部标记为完成（共 ${unresolved.length} 项）`)
   } catch (err) {
@@ -546,7 +550,11 @@ function removePendingFile(index) {
   pendingFiles.value.splice(index, 1)
 }
 
-async function handleSubmit() {
+function handleSubmit() {
+  return saveAccountWork(submitFeedback)
+}
+
+async function submitFeedback() {
   const text = inputText.value.trim()
   const hasPending = pendingFiles.value.length > 0
   if (!text && !hasPending) return
@@ -588,8 +596,15 @@ async function handleSubmit() {
   }
 }
 
-async function toggleItem(id) { await api.toggleFeedbackResolved(id); emit('changed') }
-async function deleteItem(id) { await api.deleteFeedback(id); emit('changed') }
+async function toggleItem(id) {
+  await saveAccountWork(() => api.toggleFeedbackResolved(id))
+  emit('changed')
+}
+
+async function deleteItem(id) {
+  await saveAccountWork(() => api.deleteFeedback(id))
+  emit('changed')
+}
 </script>
 
 <style scoped>

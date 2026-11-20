@@ -747,8 +747,8 @@ function registerIpcHandlers() {
   const SYNC_PREVIEW_LIMIT = 3
   const SHARED_SYNC_NAMESPACE = 'shared-orders'
 
-  function getSyncSettingKey(suffix) {
-    return `sync:${suffix}:${SHARED_SYNC_NAMESPACE}`
+  function getSyncSettingKey(suffix, userId) {
+    return `sync:${suffix}:account:${userId}`
   }
 
   function ensureUserSyncScope(userRow) {
@@ -775,12 +775,16 @@ function registerIpcHandlers() {
     return deviceId
   }
 
-  function getSyncDirectory() {
-    return normalizeRootPath(getSettingValue('syncDirectory') || '')
+  function accountDirectoryKey(userId, kind) {
+    return `accountDirectory:${kind}:${userId}`
   }
 
-  function getRootDirectory() {
-    return normalizeRootPath(getSettingValue('rootDirectory') || '')
+  function getSyncDirectory(userId) {
+    return normalizeRootPath(getSettingValue(accountDirectoryKey(userId, 'syncDirectory')) || '')
+  }
+
+  function getRootDirectory(userId) {
+    return normalizeRootPath(getSettingValue(accountDirectoryKey(userId, 'rootDirectory')) || '')
   }
 
   function ensureDir(dirPath) {
@@ -798,6 +802,120 @@ function registerIpcHandlers() {
       : path.join(syncDir, getSharedSyncDirName())
   }
 
+  function getLegacyDirectories() {
+    return {
+      rootDirectory: normalizeRootPath(getSettingValue('rootDirectory') || ''),
+      syncDirectory: normalizeRootPath(getSettingValue('syncDirectory') || ''),
+    }
+  }
+
+  function getAccountDirectories(userId) {
+    return {
+      rootDirectory: getRootDirectory(userId),
+      syncDirectory: getSyncDirectory(userId),
+      legacy: getLegacyDirectories(),
+    }
+  }
+
+  function physicalDirectory(directory) {
+    const absolute = path.resolve(directory)
+    let parent = absolute
+    for (;;) {
+      try {
+        return path.join(fs.realpathSync.native(parent), path.relative(parent, absolute))
+      } catch (error) {
+        if (!['ENOENT', 'ENOTDIR'].includes(error.code) || parent === path.dirname(parent)) throw error
+        parent = path.dirname(parent)
+      }
+    }
+  }
+
+  function sameDirectory(left, right) {
+    if (isSamePath(left, right)) return true
+    const a = fs.statSync(left, { throwIfNoEntry: false })
+    const b = fs.statSync(right, { throwIfNoEntry: false })
+    return !!(a && b && a.dev === b.dev && a.ino === b.ino)
+  }
+
+  function directoriesOverlap(left, right) {
+    const a = physicalDirectory(left)
+    const b = physicalDirectory(right)
+    const contains = (parent, child) => {
+      const relative = path.relative(parent, child)
+      return !!relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+    }
+    return sameDirectory(a, b) || contains(a, b) || contains(b, a)
+  }
+
+  function syncDirectoriesOverlap(left, right) {
+    return directoriesOverlap(left, right) || directoriesOverlap(resolveSharedSyncDir(left), resolveSharedSyncDir(right))
+  }
+
+  function validateSyncDirectory(userId, directory, claimingLegacy = false) {
+    if (!path.isAbsolute(directory) || !fs.statSync(directory, { throwIfNoEntry: false })?.isDirectory()) {
+      return { success: false, error: 'DIRECTORY_UNAVAILABLE' }
+    }
+    const legacy = getLegacyDirectories().syncDirectory
+    if (!claimingLegacy && legacy && syncDirectoriesOverlap(legacy, directory)) {
+      return { success: false, error: 'LEGACY_DIRECTORY_UNCLAIMED' }
+    }
+    const otherAccounts = db.prepare('SELECT id, username FROM Users WHERE id <> ?').all(userId)
+    for (const other of otherAccounts) {
+      const otherDirectory = getSyncDirectory(other.id)
+      if (otherDirectory && syncDirectoriesOverlap(otherDirectory, directory)) {
+        return { success: false, error: 'SYNC_DIRECTORY_IN_USE', accountName: other.username }
+      }
+    }
+    return { success: true }
+  }
+
+  function saveAccountDirectory(userId, kind, value, claimLegacy = false) {
+    if (!userId || !db.prepare('SELECT id FROM Users WHERE id = ?').get(userId)) {
+      return { success: false, error: 'INVALID_USER' }
+    }
+    if (!['rootDirectory', 'syncDirectory'].includes(kind)) return { success: false, error: 'INVALID_DIRECTORY_TYPE' }
+
+    const sync = kind === 'syncDirectory'
+    const directory = claimLegacy ? getLegacyDirectories()[kind] : normalizeRootPath(value)
+    const previous = sync ? getSyncDirectory(userId) : getRootDirectory(userId)
+    if (!directory) return { success: false, error: claimLegacy ? 'NO_LEGACY_DIRECTORY' : 'DIRECTORY_UNAVAILABLE' }
+    if (!path.isAbsolute(directory) || !fs.statSync(directory, { throwIfNoEntry: false })?.isDirectory()) {
+      return { success: false, error: 'DIRECTORY_UNAVAILABLE' }
+    }
+    if (sync) {
+      const result = validateSyncDirectory(userId, directory, claimLegacy)
+      if (!result.success) return result
+    } else if (!claimLegacy) {
+      const legacyRoot = getLegacyDirectories().rootDirectory
+      if (legacyRoot && sameDirectory(physicalDirectory(legacyRoot), physicalDirectory(directory))) {
+        return { success: false, error: 'LEGACY_DIRECTORY_UNCLAIMED' }
+      }
+    }
+    db.transaction(() => {
+      setSettingValue(accountDirectoryKey(userId, kind), directory)
+      if (sync && previous && !sameDirectory(physicalDirectory(resolveSharedSyncDir(previous)), physicalDirectory(resolveSharedSyncDir(directory)))) {
+        setSettingValue(getSyncSettingKey('lastSuccessAt', userId), '')
+        db.prepare('UPDATE SyncEvents SET exportedAt = NULL WHERE userId = ? AND deviceId = ?')
+          .run(userId, getSyncDeviceId())
+      }
+      if (claimLegacy) {
+        db.prepare('DELETE FROM Settings WHERE key = ?').run(kind)
+        if (sync) {
+          db.prepare(`
+            INSERT OR IGNORE INTO AccountSyncAppliedEvents (userId, eventId, appliedAt)
+            SELECT ?, eventId, appliedAt FROM SyncAppliedEvents
+          `).run(userId)
+          db.prepare('DELETE FROM SyncAppliedEvents').run()
+          const legacyKey = `sync:lastSuccessAt:${SHARED_SYNC_NAMESPACE}`
+          const lastSync = getSettingValue(legacyKey)
+          if (lastSync) setSettingValue(getSyncSettingKey('lastSuccessAt', userId), lastSync)
+          db.prepare('DELETE FROM Settings WHERE key = ?').run(legacyKey)
+        }
+      }
+    })()
+    return { success: true, ...getAccountDirectories(userId) }
+  }
+
   function ensureSharedSyncDirs(syncDir) {
     const baseDir = resolveSharedSyncDir(syncDir)
     const eventsDir = path.join(baseDir, 'events')
@@ -812,8 +930,8 @@ function registerIpcHandlers() {
     return Array.isArray(parsed) ? parsed : []
   }
 
-  function getLocalAttachmentDir() {
-    const dir = path.join(app.getPath('userData'), 'attachments')
+  function getLocalAttachmentDir(userId) {
+    const dir = path.join(app.getPath('userData'), 'attachments', `account-${userId}`)
     ensureDir(dir)
     return dir
   }
@@ -995,7 +1113,7 @@ function registerIpcHandlers() {
       summaryLabel: orderRow.title || '未命名订单',
       summaryExtra,
       payload: {
-        sourceRoot: getRootDirectory(),
+        sourceRoot: getRootDirectory(orderRow.userId),
         changedFields,
         order: orderRow,
       },
@@ -1013,7 +1131,7 @@ function registerIpcHandlers() {
       summaryLabel: `${revisionRow.orderTitle || '未命名订单'}-${revisionRow.title || '未命名轮次'}`,
       summaryExtra: changedFields.map(getFieldLabel).join('、'),
       payload: {
-        sourceRoot: getRootDirectory(),
+        sourceRoot: getRootDirectory(revisionRow.userId),
         changedFields,
         orderSyncUuid: revisionRow.orderSyncUuid,
         orderTitle: revisionRow.orderTitle || '',
@@ -1046,19 +1164,12 @@ function registerIpcHandlers() {
   }
 
   function buildPendingSyncSummary(userId) {
-    const lastSyncAt = getSettingValue(getSyncSettingKey('lastSuccessAt'))
-    const params = [userId, getSyncDeviceId()]
-    let query = `
+    const rows = db.prepare(`
       SELECT eventId, entityType, action, payload, summaryLabel, summaryExtra, createdAt
       FROM SyncEvents
-      WHERE userId = ? AND deviceId = ?
-    `
-    if (lastSyncAt) {
-      query += ' AND datetime(createdAt) > datetime(?)'
-      params.push(lastSyncAt)
-    }
-    query += ' ORDER BY datetime(createdAt) ASC'
-    const rows = db.prepare(query).all(...params)
+      WHERE userId = ? AND deviceId = ? AND exportedAt IS NULL
+      ORDER BY createdAt ASC
+    `).all(userId, getSyncDeviceId())
     const groups = new Map()
 
     function pushGroup(key, title, text) {
@@ -1115,8 +1226,8 @@ function registerIpcHandlers() {
       totalCount: details.reduce((sum, item) => sum + item.count, 0),
       details,
       text: details.length > 0
-        ? `自上次同步后，本机新增重要记录 ${details.reduce((sum, item) => sum + item.count, 0)} 项。${details.map(item => item.text).join('；')}`
-        : '自上次同步后，本机暂无重要新增记录',
+        ? `当前账号待导出重要记录 ${details.reduce((sum, item) => sum + item.count, 0)} 项。${details.map(item => item.text).join('；')}`
+        : '当前账号暂无待导出的重要记录',
     }
   }
 
@@ -1157,9 +1268,9 @@ function registerIpcHandlers() {
     }
   }
 
-  function materializeAttachmentsForImport(feedbackPayload, syncDir) {
+  function materializeAttachmentsForImport(feedbackPayload, syncDir, userId) {
     const portableAttachments = parseAttachments(feedbackPayload.attachments)
-    const localDir = getLocalAttachmentDir()
+    const localDir = getLocalAttachmentDir(userId)
     const localizedAttachments = []
     for (const item of portableAttachments) {
       const nextItem = { ...item }
@@ -1183,11 +1294,18 @@ function registerIpcHandlers() {
     return JSON.stringify(localizedAttachments)
   }
 
+  function mapIncomingFolderPath(sourceRoot, localRoot, remotePath, existingPath = '') {
+    if (!localRoot || !sourceRoot) return existingPath
+    if (existingPath && !isPathWithin(localRoot, existingPath)) return existingPath
+    const mapped = replacePathPrefix(sourceRoot, localRoot, remotePath)
+    return mapped && path.isAbsolute(mapped) && isPathWithin(localRoot, mapped) ? mapped : existingPath
+  }
+
   function applyOrderEvent(event, userId) {
     const payload = event.payload || {}
     const order = payload.order
     if (!order?.syncUuid) return
-    const localRoot = getRootDirectory()
+    const localRoot = getRootDirectory(userId)
     if (event.action === 'delete') {
       const existingOrder = getOrderBySyncUuid(order.syncUuid, userId)
       if (!existingOrder) return
@@ -1200,7 +1318,8 @@ function registerIpcHandlers() {
       return
     }
 
-    const mappedFolderPath = replacePathPrefix(payload.sourceRoot || '', localRoot, order.folderPath || '')
+    const existingOrder = getOrderBySyncUuid(order.syncUuid, userId)
+    const mappedFolderPath = mapIncomingFolderPath(payload.sourceRoot, localRoot, order.folderPath, existingOrder?.folderPath)
     const orderData = {
       title: order.title || '',
       university: order.university || '',
@@ -1242,7 +1361,6 @@ function registerIpcHandlers() {
       orderData.handlerPaidAmount = 0
       orderData.isHandlerPaid = 0
     }
-    const existingOrder = getOrderBySyncUuid(order.syncUuid, userId)
     if (existingOrder && !orderData.orderCode) {
       orderData.orderCode = existingOrder.orderCode || ''
     }
@@ -1311,7 +1429,7 @@ function registerIpcHandlers() {
     const payload = event.payload || {}
     const revision = payload.revision
     if (!revision?.syncUuid || !payload.orderSyncUuid) return
-    const localRoot = getRootDirectory()
+    const localRoot = getRootDirectory(userId)
     const parentOrder = getOrderBySyncUuid(payload.orderSyncUuid, userId)
     if (!parentOrder) return
     if (event.action === 'delete') {
@@ -1322,7 +1440,8 @@ function registerIpcHandlers() {
       return
     }
 
-    const mappedFolderPath = replacePathPrefix(payload.sourceRoot || '', localRoot, revision.folderPath || '')
+    const existingRevision = getRevisionBySyncUuid(revision.syncUuid, userId)
+    const mappedFolderPath = mapIncomingFolderPath(payload.sourceRoot, localRoot, revision.folderPath, existingRevision?.folderPath)
     const revisionData = {
       orderId: parentOrder.id,
       title: revision.title || '',
@@ -1332,7 +1451,6 @@ function registerIpcHandlers() {
       createdAt: revision.createdAt || nowIso(),
       syncUuid: revision.syncUuid,
     }
-    const existingRevision = getRevisionBySyncUuid(revision.syncUuid, userId)
     if (existingRevision) {
       db.prepare(`
         UPDATE Revisions SET
@@ -1364,7 +1482,7 @@ function registerIpcHandlers() {
       return
     }
 
-    const attachments = materializeAttachmentsForImport(feedback, syncDir)
+    const attachments = materializeAttachmentsForImport(feedback, syncDir, userId)
     const feedbackData = {
       revisionId: parentRevision.id,
       content: feedback.content || '',
@@ -1399,7 +1517,7 @@ function registerIpcHandlers() {
       if (event.entityType === 'order') applyOrderEvent(event, userId)
       else if (event.entityType === 'revision') applyRevisionEvent(event, userId)
       else if (event.entityType === 'feedback') applyFeedbackEvent(event, userId, syncDir)
-      db.prepare('INSERT OR REPLACE INTO SyncAppliedEvents (eventId, appliedAt) VALUES (?, ?)').run(event.eventId, nowIso())
+      db.prepare('INSERT OR REPLACE INTO AccountSyncAppliedEvents (userId, eventId, appliedAt) VALUES (?, ?, ?)').run(userId, event.eventId, nowIso())
     })
     applyTxn()
   }
@@ -1480,10 +1598,10 @@ function registerIpcHandlers() {
       try {
         const event = JSON.parse(fs.readFileSync(filePath, 'utf8'))
         if (!event?.eventId) continue
-        const applied = db.prepare('SELECT eventId FROM SyncAppliedEvents WHERE eventId = ?').get(event.eventId)
+        const applied = db.prepare('SELECT eventId FROM AccountSyncAppliedEvents WHERE userId = ? AND eventId = ?').get(userId, event.eventId)
         if (applied) continue
         if (event.deviceId === getSyncDeviceId()) {
-          db.prepare('INSERT OR REPLACE INTO SyncAppliedEvents (eventId, appliedAt) VALUES (?, ?)').run(event.eventId, nowIso())
+          db.prepare('INSERT OR REPLACE INTO AccountSyncAppliedEvents (userId, eventId, appliedAt) VALUES (?, ?, ?)').run(userId, event.eventId, nowIso())
           continue
         }
         rawEvents.push(event)
@@ -1502,23 +1620,23 @@ function registerIpcHandlers() {
   }
 
   function getSyncOverview(userId) {
-    const syncDirectory = getSyncDirectory()
+    const syncDirectory = getSyncDirectory(userId)
     const pendingSummary = buildPendingSyncSummary(userId)
-    const lastSyncAt = getSettingValue(getSyncSettingKey('lastSuccessAt'))
+    const lastSyncAt = getSettingValue(getSyncSettingKey('lastSuccessAt', userId))
     let status = '待首次同步'
     if (!syncDirectory) status = '未设置同步目录'
     else if (pendingSummary.totalCount > 0) status = '可同步'
     else if (lastSyncAt) status = '已同步'
     return {
       deviceId: getSyncDeviceId(),
-      syncScope: SHARED_SYNC_NAMESPACE,
+      syncScope: getUserSyncProfile(userId)?.syncScope || '',
       syncDirectory,
       lastSyncAt,
       status,
       summary: pendingSummary,
       hint: syncDirectory
-        ? '当前版本按统一订单数据池同步，不区分账号。请先确认 Syncthing 已完成目录同步，再点击同步。'
-        : '请先选择用于 Syncthing 的同步目录。',
+        ? '只读写当前账号的同步目录。请等 Syncthing 完成目录同步后再继续。'
+        : '请为当前账号选择 Syncthing 同步目录。',
     }
   }
 
@@ -1617,7 +1735,7 @@ function registerIpcHandlers() {
   }
 
   function buildGraduationFolderMigrationPreview(userId) {
-    const rootDirectory = getRootDirectory()
+    const rootDirectory = getRootDirectory(userId)
     if (!userId) return { success: false, error: 'INVALID_USER' }
     if (!rootDirectory) return { success: false, error: 'ROOT_DIR_NOT_SET' }
 
@@ -2023,6 +2141,16 @@ function registerIpcHandlers() {
     return true
   })
 
+  ipcMain.handle('settings:getAccountDirectories', (_, userId) => getAccountDirectories(userId))
+
+  ipcMain.handle('settings:setAccountDirectory', (_, userId, kind, directory) => (
+    saveAccountDirectory(userId, kind, directory)
+  ))
+
+  ipcMain.handle('settings:claimLegacyDirectory', (_, userId, kind) => (
+    saveAccountDirectory(userId, kind, '', true)
+  ))
+
   ipcMain.handle('settings:selectDirectory', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory', 'createDirectory'],
@@ -2037,29 +2165,24 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('sync:run', (_, userId) => {
-    if (!userId) return { success: false, error: 'INVALID_USER' }
-    const syncDir = getSyncDirectory()
+    if (!userId || !getUserSyncProfile(userId)) return { success: false, error: 'INVALID_USER' }
+    const syncDir = getSyncDirectory(userId)
     if (!syncDir) return { success: false, error: 'SYNC_DIR_NOT_SET' }
-    ensureSharedSyncDirs(syncDir)
-    const localEventCount = db.prepare('SELECT COUNT(*) AS c FROM SyncEvents WHERE userId = ? AND deviceId = ?').get(userId, getSyncDeviceId()).c
-    if (localEventCount === 0 && !hasAnyRemoteEvent(syncDir)) {
-      seedBaselineSyncEvents(userId)
-    }
-    let imported
     try {
-      imported = importSyncEvents(syncDir, userId)
+      const validated = validateSyncDirectory(userId, syncDir)
+      if (!validated.success) return validated
+      ensureSharedSyncDirs(syncDir)
+      const localEventCount = db.prepare('SELECT COUNT(*) AS c FROM SyncEvents WHERE userId = ? AND deviceId = ?').get(userId, getSyncDeviceId()).c
+      if (localEventCount === 0 && !hasAnyRemoteEvent(syncDir)) {
+        seedBaselineSyncEvents(userId)
+      }
+      const imported = importSyncEvents(syncDir, userId)
+      const exported = exportPendingSyncEvents(syncDir, userId)
+      const finishedAt = nowIso()
+      setSettingValue(getSyncSettingKey('lastSuccessAt', userId), finishedAt)
+      return { success: true, imported, exported, finishedAt, overview: getSyncOverview(userId) }
     } catch (err) {
       return { success: false, error: err.message }
-    }
-    const exported = exportPendingSyncEvents(syncDir, userId)
-    const finishedAt = nowIso()
-    setSettingValue(getSyncSettingKey('lastSuccessAt'), finishedAt)
-    return {
-      success: true,
-      imported,
-      exported,
-      finishedAt,
-      overview: getSyncOverview(userId),
     }
   })
 
@@ -2078,7 +2201,6 @@ function registerIpcHandlers() {
     const fs = require('fs')
     const user = ensureUserSyncScope(db.prepare('SELECT id, username, syncScope FROM Users WHERE id = ?').get(userId))
     if (!user) return { success: false, error: 'USER_NOT_FOUND' }
-    const rootRow = db.prepare('SELECT value FROM Settings WHERE key = ?').get('rootDirectory')
     const orders = db.prepare('SELECT * FROM Orders WHERE userId = ? ORDER BY id ASC').all(userId)
     const orderIds = orders.map(o => o.id)
     const revisions = orderIds.length > 0
@@ -2091,7 +2213,7 @@ function registerIpcHandlers() {
     const payload = {
       formatVersion: 1,
       exportedAt: new Date().toISOString(),
-      exportRoot: rootRow?.value || '',
+      exportRoot: getRootDirectory(userId),
       user: { id: user.id, username: user.username, syncScope: user.syncScope },
       data: {
         orders,
@@ -2271,7 +2393,7 @@ function registerIpcHandlers() {
         )
       }
 
-      db.prepare('INSERT OR REPLACE INTO Settings (key, value) VALUES (?, ?)').run('rootDirectory', normalizedNewRoot)
+      setSettingValue(accountDirectoryKey(currentUserId, 'rootDirectory'), normalizedNewRoot)
     })
 
     try {
@@ -2280,7 +2402,7 @@ function registerIpcHandlers() {
       return { success: false, error: err.message || 'IMPORT_FAILED' }
     }
 
-    setSettingValue(getSyncSettingKey('lastSuccessAt'), '')
+    setSettingValue(getSyncSettingKey('lastSuccessAt', currentUserId), '')
 
     return {
       success: true,
@@ -2413,7 +2535,7 @@ function registerIpcHandlers() {
         throw new Error(`订单编号“${orderData.orderCode}”已存在，请检查群聊名称或使用其他编号。`)
       }
       orderData.groupChatName = manualGroupChatName || orderData.orderCode
-      const rootDirectory = getRootDirectory()
+      const rootDirectory = getRootDirectory(orderData.userId)
       if (rootDirectory && !orderData.folderPath) {
         if (!fs.statSync(rootDirectory, { throwIfNoEntry: false })?.isDirectory()) {
           throw new Error('项目根目录不可用，请检查磁盘和目录设置。')
@@ -2480,7 +2602,7 @@ function registerIpcHandlers() {
       return { success: true, folderRenamed: false, folderPath: existingOrder.folderPath || '' }
     }
 
-    const rootDirectory = getRootDirectory()
+    const rootDirectory = getRootDirectory(userId)
     const oldFolderPath = path.normalize(existingOrder.folderPath)
     if (!rootDirectory) return { success: false, error: 'ROOT_DIR_NOT_SET' }
     if (!fs.existsSync(oldFolderPath)) return { success: false, error: 'SOURCE_NOT_FOUND', oldFolderPath }
@@ -2569,7 +2691,7 @@ function registerIpcHandlers() {
     recordOrderSyncEvent('delete', orderRow)
 
     if (deleteFolder) {
-      const validation = validateOrderFolderDeletion(orderRow?.folderPath || '', getRootDirectory())
+      const validation = validateOrderFolderDeletion(orderRow?.folderPath || '', getRootDirectory(userId))
       folderDeleteResult = {
         requested: true,
         deleted: false,

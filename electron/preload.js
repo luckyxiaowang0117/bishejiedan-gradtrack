@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Settings
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
+  getAccountDirectories: (userId) => ipcRenderer.invoke('settings:getAccountDirectories', userId),
+  setAccountDirectory: (userId, kind, directory) => ipcRenderer.invoke('settings:setAccountDirectory', userId, kind, directory),
+  claimLegacyDirectory: (userId, kind) => ipcRenderer.invoke('settings:claimLegacyDirectory', userId, kind),
   selectDirectory: () => ipcRenderer.invoke('settings:selectDirectory'),
   getSyncOverview: (userId) => ipcRenderer.invoke('sync:getOverview', userId),
   runSync: (userId) => ipcRenderer.invoke('sync:run', userId),

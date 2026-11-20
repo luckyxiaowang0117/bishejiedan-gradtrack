@@ -6,6 +6,8 @@
     :style="dialogStyleVars"
     align-center
     :close-on-click-modal="false"
+    :close-on-press-escape="!saving"
+    :show-close="!saving"
     destroy-on-close
     class="order-dialog"
   >
@@ -264,6 +266,7 @@ const emit = defineEmits(['update:visible', 'saved'])
 const api = window.electronAPI
 const currentUser = inject('currentUser')
 const saving = ref(false)
+defineExpose({ saving })
 const isEditing = computed(() => !!props.order)
 const dialogWidth = ref(null)
 const dialogShiftX = ref(0)

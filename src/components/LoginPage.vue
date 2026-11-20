@@ -100,7 +100,10 @@
           <span>{{ loading ? '注册中...' : '注 册' }}</span>
         </button>
         <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
-        <p class="switch-link">已有账号？<a @click="isRegister = false">返回登录</a></p>
+        <p v-if="registrationOnly" class="switch-link">
+          <button type="button" class="cancel-registration" :disabled="loading" @click="$emit('cancel-registration')">返回当前账号</button>
+        </p>
+        <p v-else class="switch-link">已有账号？<a @click="isRegister = false">返回登录</a></p>
       </form>
     </div>
   </div>
@@ -112,11 +115,12 @@ import LoginOrbitBackground from './LoginOrbitBackground.vue'
 
 const props = defineProps({
   forceRegister: Boolean,
+  registrationOnly: Boolean,
   isWindows: Boolean,
   unlockUser: Object,
   unlockReason: String,
 })
-const emit = defineEmits(['logged-in'])
+const emit = defineEmits(['logged-in', 'cancel-registration'])
 const api = window.electronAPI
 
 const isRegister = ref(!!props.forceRegister)
@@ -221,6 +225,13 @@ async function handleRegister() {
 </script>
 
 <style scoped>
+.cancel-registration {
+  border: 0;
+  background: transparent;
+  color: var(--gt-text-accent);
+  cursor: pointer;
+  font: inherit;
+}
 .login-wrapper {
   --login-heading: light-dark(var(--gt-text-main), #ffffff);
   --login-text: var(--gt-text-body);

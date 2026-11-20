@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-- 应用版本：`6.5.3`
+- 应用版本：`6.5.4`
 - 技术栈：`Vue 3`、`Vite`、`Electron`、`better-sqlite3`
 
 ## 开发命令
@@ -15,6 +15,14 @@ npm run dev
 npm run build:mac -- --arm64
 npm run build:win
 ```
+
+## 6.5.4 更新说明
+
+- 左侧显示当前登录账号，可用目标账号密码快捷切换。「系统设置 → 账号与登录」集中管理近期账号、注册、退出、密码和登录保护。
+- 项目根目录、Syncthing 同步目录、同步状态和已导入记录按账号保存。切换账号后自动使用各自的设置，重叠的本机同步目录会被拦截。
+- 从旧版升级后，旧目录在设置中显示为待确认归属。请登录对应账号再确认，归属确认只更新设置和同步记录，已有订单文件留在原处。
+
+macOS Apple 芯片版安装包见 [v6.5.4 GitHub Release](https://github.com/luckyxiaowang0117/bishejiedan-gradtrack/releases/tag/v6.5.4)。
 
 ## 6.5.3 更新说明
 

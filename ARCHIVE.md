@@ -35,6 +35,13 @@
 | 6.5.0 | `接单管理助手-6.5.0-arm64.dmg` | 2026-11-20 |
 | 6.5.1 | `gradtrack-6.5.1-arm64.dmg`（macOS Apple 芯片版） | 2026-11-20 |
 | 6.5.2 | `gradtrack-6.5.2-arm64.dmg`（macOS Apple 芯片版） | 2026-11-20 |
+| 6.5.4 | `gradtrack-6.5.4-arm64.dmg`（macOS Apple 芯片版） | 2026-11-20 |
+
+## 6.5.4 更新说明
+
+- 新增左侧账号栏、快捷切换和「账号与登录」设置。
+- 按账号保存项目根目录和 Syncthing 同步目录，独立记录同步状态。旧目录确认归属后启用，已有订单文件留在原处。
+- 安装包和完整说明见 [v6.5.4 GitHub Release](https://github.com/luckyxiaowang0117/bishejiedan-gradtrack/releases/tag/v6.5.4)。
 
 ## 6.5.2 更新说明
 

@@ -12,6 +12,14 @@
           <span class="brand-version">v{{ appVersion }}</span>
         </div>
       </div>
+      <div v-if="accountName" class="sidebar-account">
+        <button type="button" class="account-name-button" :title="accountName" @click="$emit('open-account-settings')">
+          <el-icon aria-hidden="true"><User /></el-icon>
+          <span class="account-caption">当前账号</span>
+          <strong>{{ accountName }}</strong>
+        </button>
+        <el-button size="small" class="switch-account-button" @click="$emit('switch-account')">切换账号</el-button>
+      </div>
       <el-input
         :model-value="search"
         @update:model-value="$emit('search-change', $event)"
@@ -389,6 +397,7 @@ import { orderTypeMeta as orderTypeMap } from '../orderTypeMeta.js'
 
 const props = defineProps({
   appVersion: String,
+  accountName: String,
   orderGroups: {
     type: Array,
     default: () => [],
@@ -441,6 +450,8 @@ defineEmits([
   'create',
   'open-sync',
   'open-settings',
+  'open-account-settings',
+  'switch-account',
   'open-stats',
   'logout',
 ])
@@ -614,6 +625,35 @@ function getStatus(order) {
   gap: 8px;
   margin-bottom: 8px;
 }
+
+.sidebar-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 4px 5px 4px 8px;
+  border: 1px solid var(--gt-border);
+  border-radius: 8px;
+  background: var(--gt-surface-subtle);
+}
+.account-name-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--gt-text-main);
+  font: inherit;
+  cursor: pointer;
+}
+.account-name-button:hover { color: var(--gt-text-accent); }
+.account-name-button:focus-visible { outline: 2px solid var(--gt-text-accent); outline-offset: 2px; }
+.account-name-button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-caption { flex: none; color: var(--gt-text-muted); font-size: 12px; }
+.switch-account-button { flex: none; margin: 0; }
 
 .brand-copy {
   display: flex;

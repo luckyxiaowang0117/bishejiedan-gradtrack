@@ -1,15 +1,19 @@
 <template>
   <LoginPage
-    v-if="!isLoggedIn"
-    :force-register="forceRegister"
+    v-if="!isLoggedIn || showAccountRegistration"
+    :force-register="forceRegister || showAccountRegistration"
+    :registration-only="showAccountRegistration"
     :is-windows="isWindows"
     :unlock-user="unlockUser"
     :unlock-reason="unlockReason"
     @logged-in="onLoggedIn"
+    @cancel-registration="cancelAccountRegistration"
   />
 
-  <div v-else class="app-layout" :style="appLayoutStyle">
+  <div v-if="isLoggedIn" v-show="!showAccountRegistration" class="app-layout" :style="appLayoutStyle">
     <Sidebar
+      :key="currentUser?.id"
+      :account-name="currentUser?.username"
       :app-version="appVersion"
       :order-groups="groupedOrders"
       :selected-order-id="selectedOrderId"
@@ -50,7 +54,9 @@
       @reset-filters="handleResetFilters"
       @create="openCreateModal(null)"
       @open-sync="handleQuickSync"
-      @open-settings="showSettings = true"
+      @open-settings="openSettings()"
+      @open-account-settings="openSettings('account')"
+      @switch-account="openAccountSwitch()"
       @open-stats="showStats = true"
       @logout="handleLogout"
     />
@@ -104,19 +110,36 @@
       </div>
     </main>
 
-    <CreateOrderModal v-model:visible="showCreateModal" :order="editingOrder" @saved="onOrderSaved" />
+    <CreateOrderModal ref="createOrderModal" :key="currentUser?.id" v-model:visible="showCreateModal" :order="editingOrder" @saved="onOrderSaved" />
     <SettingsModal
+      ref="settingsModal"
+      :key="currentUser?.id"
       v-model:visible="showSettings"
       :current-user="currentUser"
+      :initial-tab="settingsTab"
+      :recent-accounts="recentAccounts"
       @reset="handleDataReset"
       @imported="handleMigrationImported"
+      @synced="handleMigrationImported"
       @order-info-default-change="orderInfoDefaultExpanded = $event"
+      @switch-account="openAccountSwitch"
+      @create-account="openAccountRegistration"
+      @logout="handleLogout"
+      @forget-account="forgetRecentAccount"
+    />
+    <AccountSwitchDialog
+      v-if="showAccountSwitch"
+      v-model:visible="showAccountSwitch"
+      :current-name="currentUser?.username"
+      :initial-name="switchTarget"
+      :recent-names="recentAccounts"
+      :authenticate="switchAccount"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { applyAppearance } from './appearance.js'
 import LoginPage from './components/LoginPage.vue'
@@ -125,6 +148,8 @@ import OrderPanel from './components/OrderPanel.vue'
 import StatsPanel from './components/StatsPanel.vue'
 import CreateOrderModal from './components/CreateOrderModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
+import AccountSwitchDialog from './components/AccountSwitchDialog.vue'
+import { accountDirectoryError } from './accountDirectoryErrors.js'
 import packageJson from '../package.json'
 
 const api = window.electronAPI
@@ -209,10 +234,17 @@ onUnmounted(() => {
 
 const isLoggedIn = ref(false)
 const currentUser = ref(null)
+let sessionVersion = 0
+let ordersRequest = 0
 const forceRegister = ref(false)
 const unlockUser = ref(null)
 const unlockReason = ref('')
 provide('currentUser', currentUser)
+const accountWork = new Set()
+provide('trackAccountWork', readState => {
+  accountWork.add(readState)
+  return () => accountWork.delete(readState)
+})
 
 function getCurrentGraduationYear() {
   const now = new Date()
@@ -236,8 +268,16 @@ const receiverFilter = ref('all')
 const handlerFilter = ref('all')
 const titleMissingOnly = ref(false)
 const showCreateModal = ref(false)
+const createOrderModal = ref(null)
 const editingOrder = ref(null)
 const showSettings = ref(false)
+const settingsModal = ref(null)
+const settingsTab = ref('general')
+const recentAccounts = ref([])
+const showAccountSwitch = ref(false)
+const switchTarget = ref('')
+const showAccountRegistration = ref(false)
+let accountActionBusy = false
 const showStats = ref(false)
 const syncBusy = ref(false)
 const orderInfoDefaultExpanded = ref(false)
@@ -581,12 +621,10 @@ function getListPreferenceKey(userId) {
 }
 
 async function loadListPreferences(userId) {
-  isHydratingListState.value = true
-  prefsReady.value = false
-  titleMissingOnly.value = false
-
+  const version = sessionVersion
   try {
     const raw = await api.getSetting(getListPreferenceKey(userId))
+    if (version !== sessionVersion) return
     if (raw) {
       const parsed = JSON.parse(raw)
       if (typeof parsed.filter === 'string') filter.value = parsed.filter
@@ -596,8 +634,6 @@ async function loadListPreferences(userId) {
     }
   } catch {}
 
-  isHydratingListState.value = false
-  prefsReady.value = true
 }
 
 async function persistListPreferences() {
@@ -612,19 +648,28 @@ async function persistListPreferences() {
 }
 
 async function loadOrders() {
-  if (!currentUser.value?.id) return
+  if (!isLoggedIn.value || !currentUser.value?.id) return
+  const userId = currentUser.value.id
+  const version = sessionVersion
+  const request = ++ordersRequest
   const gradYear = graduationYearFilter.value === 'all' ? null : graduationYearFilter.value
-  allOrders.value = await api.listOrders(currentUser.value.id, search.value, typeFilter.value, gradYear, sortMode.value)
+  const orders = await api.listOrders(userId, search.value, typeFilter.value, gradYear, sortMode.value)
+  if (version !== sessionVersion || request !== ordersRequest) return
+  allOrders.value = orders
   const opened = statsOrder.value
   if (opened?.id === selectedOrderId.value && opened?.userId === currentUser.value?.id) {
     const updated = allOrders.value.find(order => order.id === opened.id) || await api.getOrder(opened.userId, opened.id)
-    if (statsOrder.value === opened) statsOrder.value = updated || null
+    if (version === sessionVersion && request === ordersRequest && statsOrder.value === opened) {
+      statsOrder.value = updated || null
+    }
   }
 }
 
 async function loadGraduationYears() {
-  if (!currentUser.value?.id) return
+  if (!isLoggedIn.value || !currentUser.value?.id) return
+  const version = sessionVersion
   const years = await api.getGraduationYears(currentUser.value.id)
+  if (version !== sessionVersion) return
   const current = getCurrentGraduationYear()
   if (!years.includes(current)) years.push(current)
   years.sort((a, b) => b - a)
@@ -632,12 +677,75 @@ async function loadGraduationYears() {
 }
 
 async function bootstrapUserSession(user) {
-  await loadListPreferences(user.id)
-  await loadGraduationYears()
-  await loadOrders()
+  const version = sessionVersion
+  prefsReady.value = false
+  isHydratingListState.value = true
+  try {
+    await loadListPreferences(user.id)
+    if (version !== sessionVersion) return
+    await Promise.all([loadGraduationYears(), loadOrders()])
+  } catch {
+    if (version === sessionVersion) ElMessage.error('无法加载账号工作区，请重试')
+  } finally {
+    if (version === sessionVersion) {
+      isHydratingListState.value = false
+      prefsReady.value = true
+    }
+  }
+}
+
+const recentAccountsKey = 'recentAccountNames'
+
+async function loadRecentAccounts() {
+  try {
+    const raw = await api.getSetting(recentAccountsKey)
+    const names = JSON.parse(raw || '[]')
+    if (Array.isArray(names)) recentAccounts.value = names.filter(name => typeof name === 'string' && name.trim())
+    return raw !== null
+  } catch {
+    return true
+  }
+}
+
+async function saveRecentAccounts(names) {
+  recentAccounts.value = names
+  try {
+    if (!await api.setSetting(recentAccountsKey, JSON.stringify(names))) throw new Error('Setting not saved')
+  } catch {
+    ElMessage.error('无法保存本机近期账号，请重试')
+  }
+}
+
+function rememberRecentAccount(name) {
+  return saveRecentAccounts([name, ...recentAccounts.value.filter(item => item !== name)].slice(0, 8))
+}
+
+function forgetRecentAccount(name) {
+  return saveRecentAccounts(recentAccounts.value.filter(item => item !== name))
+}
+
+function resetAccountWorkspace() {
+  ++statsOrderRequest
+  prefsReady.value = false
+  isHydratingListState.value = true
+  allOrders.value = []
+  selectedOrderId.value = null
+  statsOrder.value = null
+  graduationYearList.value = []
+  graduationYearFilter.value = getCurrentGraduationYear()
+  sortMode.value = 'urgency_desc'
+  groupMode.value = 'urgency'
+  handleResetFilters()
+  showStats.value = false
+  showSettings.value = false
+  showCreateModal.value = false
+  editingOrder.value = null
+  showAccountSwitch.value = false
+  showAccountRegistration.value = false
 }
 
 async function checkAuth() {
+  const recentAccountsInitialized = await loadRecentAccounts()
   const hasUsers = await api.hasUsers()
   if (!hasUsers) {
     forceRegister.value = true
@@ -652,6 +760,7 @@ async function checkAuth() {
   try {
     const user = JSON.parse(saved)
     if (user && user.id && user.username) {
+      if (!recentAccountsInitialized) void rememberRecentAccount(user.username)
       currentUser.value = user
       forceRegister.value = false
       const requireStartupPassword = await api.getSetting('requirePasswordOnStartup')
@@ -670,12 +779,104 @@ async function checkAuth() {
 }
 
 async function onLoggedIn(user) {
+  ++sessionVersion
+  if (currentUser.value?.id !== user.id) resetAccountWorkspace()
   currentUser.value = user
   isLoggedIn.value = true
   forceRegister.value = false
   unlockUser.value = null
   unlockReason.value = ''
+  void rememberRecentAccount(user.username)
   await bootstrapUserSession(user)
+}
+
+function openSettings(tab = 'general') {
+  settingsTab.value = tab
+  showSettings.value = true
+}
+
+function accountBusyReason() {
+  if (syncBusy.value || settingsModal.value?.accountWorkBusy || createOrderModal.value?.saving
+    || [...accountWork].some(read => read().busy)) return '请等待当前同步、导入或保存操作结束后再切换'
+  if (isHydratingListState.value) return '账号工作区正在加载，请稍后重试'
+  if (showCreateModal.value) return '请先保存或关闭订单编辑窗口'
+  return ''
+}
+
+function openAccountSwitch(name = '') {
+  if (accountActionBusy) return
+  const reason = accountBusyReason()
+  if (reason) return ElMessage.warning(reason)
+  switchTarget.value = name
+  showAccountSwitch.value = true
+}
+
+async function confirmLeavingAccount() {
+  if (![...accountWork].some(read => read().draft)) return true
+  try {
+    await ElMessageBox.confirm('当前订单有未保存的修改意见或附件。可以返回保存，或放弃这些修改后继续。', '未保存的修改', {
+      confirmButtonText: '放弃并继续',
+      cancelButtonText: '返回编辑',
+      type: 'warning',
+      closeOnClickModal: false,
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function saveOpenSettings() {
+  return !showSettings.value || await settingsModal.value?.savePendingSettings()
+}
+
+async function switchAccount({ username, password, remember }) {
+  if (accountActionBusy || !isLoggedIn.value) return '当前无法切换账号'
+  const reason = accountBusyReason()
+  if (reason) return reason
+  const version = sessionVersion
+  accountActionBusy = true
+  try {
+    const user = await api.login(username, password)
+    if (version !== sessionVersion) return '当前账号状态已变化'
+    if (!user) return '目标账号或密码错误'
+    if (user.id === currentUser.value.id) return '该账号已登录，请选择其他账号'
+    if (!await confirmLeavingAccount()) {
+      showAccountSwitch.value = false
+      return ''
+    }
+    if (!await saveOpenSettings()) return '请在当前设置保存后重试'
+    if (version !== sessionVersion) return '当前账号状态已变化'
+    if (!await api.setSetting('rememberedUser', remember ? JSON.stringify(user) : '')) {
+      return '无法保存登录状态，请重试'
+    }
+    if (version !== sessionVersion) return '当前账号状态已变化'
+    await onLoggedIn(user)
+    return ''
+  } finally {
+    accountActionBusy = false
+  }
+}
+
+async function openAccountRegistration() {
+  if (accountActionBusy) return
+  const reason = accountBusyReason()
+  if (reason) return ElMessage.warning(reason)
+  const version = sessionVersion
+  accountActionBusy = true
+  try {
+    if (!await confirmLeavingAccount() || !await saveOpenSettings() || version !== sessionVersion) return
+    showSettings.value = false
+    await nextTick()
+    if (version === sessionVersion) showAccountRegistration.value = true
+  } finally {
+    accountActionBusy = false
+  }
+}
+
+function cancelAccountRegistration() {
+  showAccountRegistration.value = false
+  openSettings('account')
 }
 
 async function lockAppForPassword(reason = 'manual') {
@@ -695,12 +896,17 @@ async function lockAppForPassword(reason = 'manual') {
     unlockUser.value = savedUser
   }
   if (!unlockUser.value?.id) return
+  ++sessionVersion
+  prefsReady.value = false
+  isHydratingListState.value = false
   forceRegister.value = false
   unlockReason.value = reason
   isLoggedIn.value = false
   showStats.value = false
   showSettings.value = false
   showCreateModal.value = false
+  showAccountSwitch.value = false
+  showAccountRegistration.value = false
 }
 
 function openCreateModal(order) {
@@ -751,16 +957,15 @@ async function handleStatsOrder(id) {
 }
 
 function handleDataReset() {
+  ++sessionVersion
+  resetAccountWorkspace()
+  recentAccounts.value = []
   applyAppearance('light')
   currentUser.value = null
   isLoggedIn.value = false
   forceRegister.value = true
   unlockUser.value = null
   unlockReason.value = ''
-  allOrders.value = []
-  selectedOrderId.value = null
-  showStats.value = false
-  showSettings.value = false
 }
 
 function handleMigrationImported() {
@@ -769,54 +974,64 @@ function handleMigrationImported() {
 }
 
 async function handleQuickSync() {
-  if (!currentUser.value?.id) {
+  const user = currentUser.value
+  if (!user?.id) {
     ElMessage.error('未获取到当前用户，请重新登录后重试')
     return
   }
-  if (syncBusy.value) return
-
-  const overview = await api.getSyncOverview(currentUser.value.id)
-  if (!overview?.syncDirectory) {
-    showSettings.value = true
-    ElMessage.warning('请先在设置中配置同步目录')
-    return
-  }
-
+  if (syncBusy.value || accountActionBusy || isHydratingListState.value) return
+  const version = sessionVersion
   syncBusy.value = true
   try {
-    const result = await api.runSync(currentUser.value.id)
+    const overview = await api.getSyncOverview(user.id)
+    if (version !== sessionVersion) return
+    if (!overview?.syncDirectory) {
+      openSettings('sync')
+      ElMessage.warning('请先为当前账号配置同步目录')
+      return
+    }
+    const result = await api.runSync(user.id)
+    if (version !== sessionVersion) return
     if (!result?.success) {
-      const errorTextMap = {
-        INVALID_USER: '当前用户无效，请重新登录',
-        SYNC_DIR_NOT_SET: '请先设置同步目录',
-      }
-      ElMessage.error(errorTextMap[result?.error] || result?.error || '同步失败')
+      ElMessage.error(accountDirectoryError(result, '同步失败，请重试'))
       return
     }
     await loadGraduationYears()
     await loadOrders()
     ElMessage.success(`同步完成：导入 ${result.imported} 条，导出 ${result.exported} 条`)
+  } catch {
+    if (version === sessionVersion) ElMessage.error('同步失败，请重试')
   } finally {
     syncBusy.value = false
   }
 }
 
 async function handleLogout() {
+  if (accountActionBusy) return
+  const reason = accountBusyReason()
+  if (reason) return ElMessage.warning(reason)
+  const version = sessionVersion
+  accountActionBusy = true
   try {
     await ElMessageBox.confirm('确定要退出登录吗？', '退出登录', {
       confirmButtonText: '确认退出',
       cancelButtonText: '取消',
       type: 'warning',
     })
-    await api.setSetting('rememberedUser', '')
+    if (!await confirmLeavingAccount() || !await saveOpenSettings() || version !== sessionVersion) return
+    if (!await api.setSetting('rememberedUser', '')) return ElMessage.error('无法清除登录状态，请重试')
+    if (version !== sessionVersion) return
+    ++sessionVersion
+    resetAccountWorkspace()
     currentUser.value = null
     isLoggedIn.value = false
     unlockUser.value = null
     unlockReason.value = ''
-    allOrders.value = []
-    selectedOrderId.value = null
-    showStats.value = false
-  } catch {}
+  } catch {
+    // Closing the confirmation keeps the current session.
+  } finally {
+    accountActionBusy = false
+  }
 }
 
 watch([search, typeFilter, sortMode], () => {

@@ -64,6 +64,7 @@
 <script setup>
 import { ref, computed, watch, inject } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useAccountWork } from '../useAccountWork.js'
 
 const props = defineProps({
   folderPath: String,
@@ -74,6 +75,7 @@ const emit = defineEmits(['draft-uploaded'])
 
 const api = window.electronAPI
 const currentUser = inject('currentUser')
+const saveAccountWork = useAccountWork()
 
 const draftSubPathMap = {
   thesis: '论文文件/论文稿件/初稿',
@@ -170,14 +172,19 @@ async function handleSelectFiles() {
   }
 }
 
-async function copyAndRefresh(paths) {
+function copyAndRefresh(paths) {
+  return saveAccountWork(() => saveDraftFiles(paths))
+}
+
+async function saveDraftFiles(paths) {
+  const userId = currentUser.value?.id
   try {
     const r = await api.copyFilesToFolder(paths, draftFolderPath.value)
     if (r.success) {
       ElMessage.success(`已上传 ${r.copied.length} 个${props.orderType === 'translation' ? '译文' : '初稿'}文件`)
       await loadFiles()
-      if (props.orderId && currentUser.value && currentUser.value.id) {
-        await api.updateOrder(currentUser.value.id, props.orderId, { isDraftSubmitted: 1 })
+      if (props.orderId && userId) {
+        await api.updateOrder(userId, props.orderId, { isDraftSubmitted: 1 })
         emit('draft-uploaded')
       }
     } else {

@@ -76,10 +76,12 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import RevisionBlock from './RevisionBlock.vue'
+import { useAccountWork } from '../useAccountWork.js'
 
 const props = defineProps({ orderId: Number, revisions: Array, projectFoldersRef: Object, orderFolderPath: String })
 const emit = defineEmits(['changed'])
 const api = window.electronAPI
+const saveAccountWork = useAccountWork()
 
 const showCreateDialog = ref(false)
 const newTitle = ref('')
@@ -100,8 +102,10 @@ async function handleCreate() {
   if (!newDate.value) return
   const time = newTime.value || '23:59'
   const deadline = `${newDate.value}T${time}`
-  const revId = await api.createRevision(props.orderId, newTitle.value, props.orderFolderPath || '')
-  await api.updateRevision(revId, { deadline })
+  await saveAccountWork(async () => {
+    const revId = await api.createRevision(props.orderId, newTitle.value, props.orderFolderPath || '')
+    await api.updateRevision(revId, { deadline })
+  })
   showCreateDialog.value = false
   emit('changed')
 }
