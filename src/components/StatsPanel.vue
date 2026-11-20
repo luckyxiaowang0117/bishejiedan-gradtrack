@@ -99,33 +99,12 @@
         </div>
       </div>
 
-      <!-- Charts Row: Status + Monthly Trend -->
-      <div class="chart-row">
-        <div class="chart-card">
-          <h3 class="chart-title">订单状态分布</h3>
-          <v-chart :option="statusChartOption" autoresize class="chart" />
-        </div>
-        <div class="chart-card">
-          <h3 class="chart-title">{{ trendTitle }}</h3>
-          <v-chart :option="trendChartOption" autoresize class="chart" />
-        </div>
-      </div>
-
-      <!-- Charts Row 3: Rankings -->
-      <div class="chart-row triple">
-        <div class="chart-card">
-          <h3 class="chart-title">接单人排行</h3>
-          <v-chart :option="rankChart(data.byReceiver)" autoresize class="chart" />
-        </div>
-        <div class="chart-card">
-          <h3 class="chart-title">处理人排行</h3>
-          <v-chart :option="rankChart(data.byHandler)" autoresize class="chart" />
-        </div>
-        <div class="chart-card">
-          <h3 class="chart-title">学校来源 Top 10</h3>
-          <v-chart :option="rankChart(data.byUniversity)" autoresize class="chart" />
-        </div>
-      </div>
+      <PersonalIncome
+        :key="incomeScopeKey"
+        class="chart-card"
+        :orders="data.selfIncomeOrders"
+        @navigate-order="$emit('navigate-order', $event)"
+      />
 
       <!-- Financial Detail Table -->
       <div class="chart-card table-card">
@@ -363,16 +342,16 @@
               <div class="handler-kpi-label">总接单量</div>
             </div>
             <div class="handler-kpi">
-              <div class="handler-kpi-val">¥{{ fmt(receiverData.total.totalAmount) }}</div>
+              <div class="handler-kpi-val">¥{{ fmtMoney(receiverData.total.totalAmount) }}</div>
               <div class="handler-kpi-label">总订单额</div>
             </div>
             <div class="handler-kpi">
-              <div class="handler-kpi-val text-green">¥{{ fmt(receiverData.total.paidAmount) }}</div>
-              <div class="handler-kpi-label">已收金额 ({{ receiverData.total.paidCount }} 笔)</div>
+              <div class="handler-kpi-val text-green">¥{{ fmtMoney(receiverData.total.paidAmount) }}</div>
+              <div class="handler-kpi-label">客户已收（{{ receiverData.total.paidCount }} 笔已结清）</div>
             </div>
             <div class="handler-kpi">
-              <div class="handler-kpi-val text-red">¥{{ fmt(receiverData.total.unpaidAmount) }}</div>
-              <div class="handler-kpi-label">未结算 ({{ receiverData.total.unpaidCount }} 笔)</div>
+              <div class="handler-kpi-val text-red">¥{{ fmtMoney(receiverData.total.unpaidAmount) }}</div>
+              <div class="handler-kpi-label">客户待收（{{ receiverData.total.unpaidCount }} 笔）</div>
             </div>
           </div>
 
@@ -381,22 +360,62 @@
             <h4 class="sub-section-title">关联处理人分布</h4>
             <div class="week-orders">
               <div class="week-order-header receiver-handler-5col">
-                <span>处理人</span><span>订单数</span><span>派单总额</span><span>已付</span><span>未结</span>
+                <span>处理人</span><span>订单数</span><span>派单总额</span><span>已付处理费</span><span>待付处理费</span>
               </div>
-              <div v-for="h in receiverData.byHandler" :key="h.name" class="week-order-row receiver-handler-5col">
-                <span class="week-order-title">{{ h.name }}</span>
-                <span>{{ h.orderCount }} 单</span>
-                <span>¥{{ fmt(h.totalDispatch) }}</span>
-                <span class="text-green">¥{{ fmt(h.paidAmount) }}</span>
-                <span class="text-red">¥{{ fmt(h.unpaidAmount) }}</span>
-              </div>
+              <template v-for="(h, index) in receiverData.byHandler" :key="h.name">
+                <button
+                  type="button"
+                  class="week-order-row receiver-handler-5col receiver-handler-toggle"
+                  :aria-expanded="expandedReceiverHandler === h.name"
+                  :aria-controls="'receiver-handler-orders-' + index"
+                  @click="expandedReceiverHandler = expandedReceiverHandler === h.name ? '' : h.name"
+                >
+                  <span class="receiver-handler-name">
+                    <el-icon aria-hidden="true"><ArrowDown v-if="expandedReceiverHandler === h.name" /><ArrowRight v-else /></el-icon>
+                    <span class="week-order-title" :title="h.name">{{ h.name }}</span>
+                  </span>
+                  <span>{{ h.orderCount }} 单</span>
+                  <span>{{ h.name === '本人' ? '—' : '¥' + fmtMoney(h.totalDispatch) }}</span>
+                  <span class="text-green">{{ h.name === '本人' ? '—' : '¥' + fmtMoney(h.paidAmount) }}</span>
+                  <span class="text-red">{{ h.name === '本人' ? '—' : '¥' + fmtMoney(h.unpaidAmount) }}</span>
+                </button>
+                <div :id="'receiver-handler-orders-' + index" :hidden="expandedReceiverHandler !== h.name" class="receiver-handler-orders">
+                  <template v-if="expandedReceiverHandler === h.name">
+                    <h5>{{ h.name }}的订单（{{ expandedReceiverOrders.length }} 单）</h5>
+                    <el-table :data="expandedReceiverOrders" row-key="id" size="small" max-height="400" aria-label="处理人订单明细">
+                      <el-table-column label="订单" min-width="175">
+                        <template #default="{ row }">
+                          <el-button link type="primary" class="receiver-order-link" @click="$emit('navigate-order', row.id)">
+                            {{ row.orderCode ? row.orderCode + ' · ' : '' }}{{ row.title?.trim() || '待补充题目' }}
+                          </el-button>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="类型" min-width="90">
+                        <template #default="{ row }">{{ typeLabelMap[row.orderType || 'thesis'] || row.orderType }}</template>
+                      </el-table-column>
+                      <el-table-column label="订单金额" min-width="95" align="right">
+                        <template #default="{ row }">¥{{ fmtMoney(row.totalAmount) }}</template>
+                      </el-table-column>
+                      <el-table-column label="客户已收" min-width="95" align="right">
+                        <template #default="{ row }">¥{{ fmtMoney(row.paidAmount) }}</template>
+                      </el-table-column>
+                      <el-table-column v-for="column in receiverDispatchColumns" :key="column.key" :label="column.label" min-width="105" align="right">
+                        <template #default="{ row }">{{ h.name === '本人' ? '—' : '¥' + fmtMoney(row[column.key]) }}</template>
+                      </el-table-column>
+                      <el-table-column label="处理费状态" min-width="105">
+                        <template #default="{ row }">{{ receiverDispatchStatus(row) }}</template>
+                      </el-table-column>
+                    </el-table>
+                  </template>
+                </div>
+              </template>
             </div>
           </div>
 
           <!-- Unsettled Orders -->
           <div v-if="receiverUnsettledOrders.length > 0" class="receiver-unsettled">
             <div class="receiver-unsettled-head">
-              <h4 class="sub-section-title">未结算订单明细 ({{ filteredReceiverUnsettledOrders.length }})</h4>
+              <h4 class="sub-section-title">客户待收订单明细（{{ filteredReceiverUnsettledOrders.length }}）</h4>
               <el-select
                 v-model="receiverUnsettledTypeFilter"
                 placeholder="全部类型"
@@ -416,33 +435,33 @@
             <div class="receiver-unsettled-summary">
               <div class="receiver-unsettled-summary-card">
                 <span class="receiver-unsettled-summary-label">总金额</span>
-                <strong class="receiver-unsettled-summary-value">¥{{ fmt(receiverUnsettledSummary.totalAmount) }}</strong>
+                <strong class="receiver-unsettled-summary-value">¥{{ fmtMoney(receiverUnsettledSummary.totalAmount) }}</strong>
               </div>
               <div class="receiver-unsettled-summary-card">
-                <span class="receiver-unsettled-summary-label">已付金额</span>
-                <strong class="receiver-unsettled-summary-value text-green">¥{{ fmt(receiverUnsettledSummary.paidAmount) }}</strong>
+                <span class="receiver-unsettled-summary-label">客户已收</span>
+                <strong class="receiver-unsettled-summary-value text-green">¥{{ fmtMoney(receiverUnsettledSummary.paidAmount) }}</strong>
               </div>
               <div class="receiver-unsettled-summary-card">
-                <span class="receiver-unsettled-summary-label">未结金额</span>
-                <strong class="receiver-unsettled-summary-value text-red">¥{{ fmt(receiverUnsettledSummary.unpaidAmount) }}</strong>
+                <span class="receiver-unsettled-summary-label">客户待收</span>
+                <strong class="receiver-unsettled-summary-value text-red">¥{{ fmtMoney(receiverUnsettledSummary.unpaidAmount) }}</strong>
               </div>
             </div>
 
             <div class="week-orders">
               <div class="week-order-header receiver-unsettled-6col">
-                <span>订单名称</span><span>类型</span><span>处理人</span><span>总金额</span><span>已付金额</span><span>未结金额</span>
+                <span>订单名称</span><span>类型</span><span>处理人</span><span>总金额</span><span>客户已收</span><span>客户待收</span>
               </div>
               <div v-for="o in filteredReceiverUnsettledOrders" :key="o.id" class="week-order-row receiver-unsettled-6col" @click="$emit('navigate-order', o.id)">
                 <span class="week-order-title">{{ o.title }}</span>
                 <span :style="{ color: orderTypeMeta[o.orderType]?.color }">{{ typeLabelMap[o.orderType] || o.orderType }}</span>
                 <span>{{ o.handler || '本人' }}</span>
-                <span>¥{{ fmt(o.totalAmount) }}</span>
-                <span class="text-green">¥{{ fmt(o.paidAmount) }}</span>
-                <span class="text-red">¥{{ fmt((o.totalAmount || 0) - (o.paidAmount || 0)) }}</span>
+                <span>¥{{ fmtMoney(o.totalAmount) }}</span>
+                <span class="text-green">¥{{ fmtMoney(o.paidAmount) }}</span>
+                <span class="text-red">¥{{ fmtMoney(o.customerDue) }}</span>
               </div>
             </div>
           </div>
-          <div v-else class="week-empty">{{ receiverData.total.orderCount ? '该接单人名下无未结算订单' : '当前统计范围内该接单人暂无订单' }}</div>
+          <div v-else class="week-empty">{{ receiverData.total.orderCount ? '该接单人名下无客户待收订单' : '当前统计范围内该接单人暂无订单' }}</div>
         </template>
 
         <div v-else class="handler-placeholder">
@@ -463,44 +482,16 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, inject } from 'vue'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { PieChart, BarChart, LineChart } from 'echarts/charts'
-import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
-import VChart from 'vue-echarts'
 import { orderTypeMeta } from '../orderTypeMeta.js'
-import { appearanceMode } from '../appearance.js'
-
-use([CanvasRenderer, PieChart, BarChart, LineChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
+import PersonalIncome from './PersonalIncome.vue'
 
 defineEmits(['close', 'navigate-order'])
 const api = window.electronAPI
 const currentUser = inject('currentUser')
 const data = ref(null)
+const incomeScopeKey = ref(0)
 
 const typeLabelMap = Object.fromEntries(Object.entries(orderTypeMeta).map(([key, type]) => [key, type.label]))
-const chartPalette = computed(() => appearanceMode.value === 'dark'
-  ? { text: '#e6e6e6', grid: '#343434', border: '#515151', surface: '#222222', blue: '#a5b4fc', green: '#6ee7b7', amber: '#fcd58a', red: '#fda4af' }
-  : { text: '#334155', grid: '#e2e8f0', border: '#cbd5e1', surface: '#ffffff', blue: '#6366f1', green: '#10b981', amber: '#f59e0b', red: '#ef4444' }
-)
-
-const chartLabelStyle = computed(() => ({ color: chartPalette.value.text, fontWeight: 500 }))
-const chartAxisLine = computed(() => ({ lineStyle: { color: chartPalette.value.border } }))
-const chartSplitLine = computed(() => ({ lineStyle: { color: chartPalette.value.grid } }))
-const chartTooltipStyle = computed(() => ({
-  backgroundColor: chartPalette.value.surface,
-  borderColor: chartPalette.value.border,
-  textStyle: chartLabelStyle.value,
-}))
-const typeColorMap = {
-  thesis: '#6366f1',
-  format: '#0ea5e9',
-  translation: '#f59e0b',
-  design: '#8b5cf6',
-  reduction: '#10b981',
-  special: '#ef4444',
-}
-
 const timeMode = ref('all')
 const selectedYear = ref(new Date().getFullYear())
 const selectedMonth = ref(new Date().getMonth() + 1)
@@ -537,10 +528,12 @@ async function loadStats() {
   ++receiverRequest
   handlerData.value = null
   receiverData.value = null
+  expandedReceiverHandler.value = ''
   loadingWeek.value = false
   const summary = await api.getStats(scope)
   if (request !== summaryRequest) return
   data.value = summary
+  incomeScopeKey.value = request
   if (!summary.handlerOptions.includes(selectedHandler.value)) selectedHandler.value = ''
   if (!summary.receiverOptions.includes(selectedReceiver.value)) selectedReceiver.value = ''
   await Promise.all([loadHandlerDetail(), loadReceiverDetail()])
@@ -559,11 +552,6 @@ function onMonthChanged() {
 }
 
 watch(timeMode, loadStats)
-
-const trendTitle = computed(() => {
-  if (data.value && data.value.trendMode === 'daily') return '每日趋势'
-  return '月度趋势'
-})
 
 const selectedHandler = ref('')
 const handlerData = ref(null)
@@ -671,13 +659,30 @@ function changeWeek(dir) {
 const selectedReceiver = ref('')
 const receiverData = ref(null)
 const receiverUnsettledTypeFilter = ref('all')
+const expandedReceiverHandler = ref('')
+
+const receiverDispatchColumns = [
+  { key: 'dispatchAmount', label: '派单金额' },
+  { key: 'handlerPaidAmount', label: '已付处理费' },
+  { key: 'handlerDue', label: '待付处理费' },
+]
+
+const expandedReceiverOrders = computed(() =>
+  (receiverData.value?.allOrders || []).filter(order => order.handler === expandedReceiverHandler.value)
+)
+
+function receiverDispatchStatus(order) {
+  if (order.dispatchAmount <= 0) return '无派单费用'
+  if (order.handlerDue === 0) return '已结清'
+  return order.handlerPaidAmount > 0 ? '部分支付' : '未支付'
+}
 
 const receiverList = computed(() => data.value?.receiverOptions || [])
 let receiverRequest = 0
 
 const receiverUnsettledOrders = computed(() => {
   if (!receiverData.value) return []
-  return (receiverData.value.allOrders || []).filter(o => (o.totalAmount || 0) > 0 && (o.paidAmount || 0) < (o.totalAmount || 0))
+  return (receiverData.value.allOrders || []).filter(o => o.totalAmount > 0 && o.customerDue > 0)
 })
 
 const receiverUnsettledTypeOptions = computed(() => {
@@ -696,7 +701,7 @@ const receiverUnsettledSummary = computed(() => {
     const paidAmount = Number(order.paidAmount) || 0
     summary.totalAmount += totalAmount
     summary.paidAmount += paidAmount
-    summary.unpaidAmount += Math.max(totalAmount - paidAmount, 0)
+    summary.unpaidAmount += order.customerDue
     return summary
   }, { totalAmount: 0, paidAmount: 0, unpaidAmount: 0 })
 })
@@ -705,6 +710,7 @@ async function loadReceiverDetail() {
   const request = ++receiverRequest
   const scope = getStatsParams()
   receiverData.value = null
+  expandedReceiverHandler.value = ''
   receiverUnsettledTypeFilter.value = 'all'
   if (!selectedReceiver.value || !scope.userId) return
   const result = await api.getReceiverDetail(scope, selectedReceiver.value)
@@ -744,99 +750,6 @@ const typeRows = computed(() => {
   }))
 })
 
-const typeChartOption = computed(() => {
-  if (!data.value) return {}
-  return {
-    tooltip: { ...chartTooltipStyle.value, trigger: 'item', formatter: '{b}: {c} 单 ({d}%)' },
-    legend: { bottom: 0, textStyle: { ...chartLabelStyle.value, fontSize: 12 } },
-    color: Object.values(typeColorMap),
-    series: [{
-      type: 'pie',
-      radius: ['45%', '70%'],
-      center: ['50%', '45%'],
-      itemStyle: { borderRadius: 6, borderColor: chartPalette.value.surface, borderWidth: 2 },
-      label: { show: false },
-      data: data.value.byType.map(t => ({
-        name: typeLabelMap[t.orderType] || t.orderType,
-        value: t.count,
-      })),
-    }],
-  }
-})
-
-const revenueChartOption = computed(() => {
-  if (!data.value) return {}
-  const types = data.value.byType
-  return {
-    tooltip: { ...chartTooltipStyle.value, trigger: 'axis', formatter: (p) => p.map(i => `${i.seriesName}: ¥${(i.value || 0).toLocaleString()}`).join('<br/>') },
-    grid: { left: 60, right: 20, top: 20, bottom: 40 },
-    xAxis: { type: 'category', axisLine: chartAxisLine.value, data: types.map(t => typeLabelMap[t.orderType] || t.orderType), axisLabel: { ...chartLabelStyle.value, fontSize: 12 } },
-    yAxis: { type: 'value', splitLine: chartSplitLine.value, axisLabel: { ...chartLabelStyle.value, fontSize: 11, formatter: '¥{value}' } },
-    color: [chartPalette.value.blue, chartPalette.value.amber, chartPalette.value.red],
-    series: [
-      { name: '全款', type: 'bar', data: types.map(t => t.revenue || 0), barWidth: 20, itemStyle: { borderRadius: [4, 4, 0, 0] } },
-      { name: '派单', type: 'bar', data: types.map(t => t.dispatch || 0), barWidth: 20, itemStyle: { borderRadius: [4, 4, 0, 0] } },
-      { name: '退款', type: 'bar', data: types.map(t => t.refund || 0), barWidth: 20, itemStyle: { borderRadius: [4, 4, 0, 0] } },
-    ],
-  }
-})
-
-const statusChartOption = computed(() => {
-  if (!data.value) return {}
-  const items = data.value.byStatus || []
-  return {
-    tooltip: { ...chartTooltipStyle.value, trigger: 'axis' },
-    grid: { left: 80, right: 20, top: 20, bottom: 40 },
-    xAxis: { type: 'value', splitLine: chartSplitLine.value, axisLabel: { ...chartLabelStyle.value, fontSize: 11 } },
-    yAxis: { type: 'category', axisLine: chartAxisLine.value, data: items.map(i => typeLabelMap[i.orderType] || i.orderType), axisLabel: { ...chartLabelStyle.value, fontSize: 12 } },
-    color: [chartPalette.value.amber, chartPalette.value.green],
-    series: [
-      { name: '待提交', type: 'bar', stack: 'total', data: items.map(i => i.draftPending), itemStyle: { borderRadius: [0, 0, 0, 0] } },
-      { name: '已提交', type: 'bar', stack: 'total', data: items.map(i => i.draftDone), itemStyle: { borderRadius: [0, 4, 4, 0] } },
-    ],
-    legend: { bottom: 0, textStyle: { ...chartLabelStyle.value, fontSize: 12 } },
-  }
-})
-
-const trendChartOption = computed(() => {
-  if (!data.value) return {}
-  const trend = data.value.monthlyTrend || []
-  const isDaily = data.value.trendMode === 'daily'
-  const labels = isDaily ? trend.map(t => t.day + '日') : trend.map(t => t.month)
-  return {
-    tooltip: { ...chartTooltipStyle.value, trigger: 'axis' },
-    grid: { left: 60, right: 40, top: 20, bottom: 40 },
-    xAxis: { type: 'category', axisLine: chartAxisLine.value, data: labels, axisLabel: { ...chartLabelStyle.value, fontSize: 11, rotate: isDaily ? 45 : 0 } },
-    yAxis: [
-      { type: 'value', name: '订单数', splitLine: chartSplitLine.value, axisLabel: { ...chartLabelStyle.value, fontSize: 11 }, nameTextStyle: { ...chartLabelStyle.value, fontSize: 11 } },
-      { type: 'value', name: '收入(¥)', splitLine: chartSplitLine.value, axisLabel: { ...chartLabelStyle.value, fontSize: 11, formatter: '¥{value}' }, nameTextStyle: { ...chartLabelStyle.value, fontSize: 11 } },
-    ],
-    color: [chartPalette.value.blue, chartPalette.value.green],
-    series: [
-      { name: '订单数', type: 'bar', data: trend.map(t => t.count), barWidth: isDaily ? 12 : 18, itemStyle: { borderRadius: [4, 4, 0, 0] } },
-      { name: '收入', type: 'line', yAxisIndex: 1, data: trend.map(t => t.revenue || 0), smooth: true, lineStyle: { width: 2.5 }, symbolSize: 6 },
-    ],
-    legend: { bottom: 0, textStyle: { ...chartLabelStyle.value, fontSize: 12 } },
-  }
-})
-
-function rankChart(items) {
-  const sorted = [...(items || [])].reverse()
-  return {
-    tooltip: { ...chartTooltipStyle.value, trigger: 'axis', formatter: (p) => `${p[0].name}: ${p[0].value} 单` },
-    grid: { left: 80, right: 30, top: 10, bottom: 10 },
-    xAxis: { type: 'value', show: false },
-    yAxis: { type: 'category', axisLine: chartAxisLine.value, data: sorted.map(i => i.name), axisLabel: { ...chartLabelStyle.value, fontSize: 12 } },
-    color: [chartPalette.value.blue],
-    series: [{
-      type: 'bar',
-      data: sorted.map(i => i.count),
-      barWidth: 16,
-      itemStyle: { borderRadius: [0, 4, 4, 0] },
-      label: { show: true, position: 'right', ...chartLabelStyle.value, fontSize: 11, formatter: '{c} 单' },
-    }],
-  }
-}
 </script>
 
 <style scoped>
@@ -1004,16 +917,6 @@ function rankChart(items) {
   margin-top: 2px;
 }
 
-/* Charts */
-.chart-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-bottom: 14px;
-}
-.chart-row.triple {
-  grid-template-columns: 1fr 1fr 1fr;
-}
 .chart-card {
   background: var(--gt-surface);
   border: 1px solid var(--gt-border);
@@ -1027,11 +930,6 @@ function rankChart(items) {
   color: light-dark(#334155, var(--gt-text-body));
   margin-bottom: 12px;
 }
-.chart {
-  width: 100%;
-  height: 240px;
-}
-
 /* Table */
 .table-card {
   margin-bottom: 16px;
@@ -1306,6 +1204,49 @@ function rankChart(items) {
 }
 .receiver-handler-5col {
   grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr !important;
+}
+.receiver-handler-toggle {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--gt-border-strong);
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+}
+.receiver-handler-toggle[aria-expanded="true"] {
+  background: var(--gt-accent-surface);
+}
+.receiver-handler-toggle:focus-visible {
+  outline: 2px solid var(--gt-text-accent);
+  outline-offset: -2px;
+}
+.receiver-handler-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.receiver-handler-name .el-icon {
+  flex-shrink: 0;
+}
+.receiver-handler-orders {
+  padding: 12px 16px 16px;
+  background: var(--gt-surface-subtle);
+}
+.receiver-handler-orders h5 {
+  margin: 0 0 8px;
+  color: var(--gt-text-main);
+  font-size: 13px;
+}
+.receiver-order-link {
+  max-width: 100%;
+  height: auto;
+  text-align: left;
+}
+.receiver-order-link :deep(span) {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .receiver-unsettled {
   margin-bottom: 8px;

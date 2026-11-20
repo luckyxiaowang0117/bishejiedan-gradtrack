@@ -81,7 +81,7 @@
       <StatsPanel
         v-if="showStats"
         @close="showStats = false"
-        @navigate-order="handleSelectOrder"
+        @navigate-order="handleStatsOrder"
       />
 
       <OrderPanel
@@ -221,6 +221,8 @@ function getCurrentGraduationYear() {
 
 const allOrders = ref([])
 const selectedOrderId = ref(null)
+const statsOrder = ref(null)
+let statsOrderRequest = 0
 const filter = ref('all')
 const search = ref('')
 const typeFilter = ref('all')
@@ -571,7 +573,8 @@ const groupedOrders = computed(() => {
   })
 })
 
-const selectedOrder = computed(() => allOrders.value.find(o => o.id === selectedOrderId.value) || null)
+const selectedOrder = computed(() => allOrders.value.find(o => o.id === selectedOrderId.value)
+  || (statsOrder.value?.id === selectedOrderId.value && statsOrder.value?.userId === currentUser.value?.id ? statsOrder.value : null))
 
 function getListPreferenceKey(userId) {
   return `listPreferences:${userId}`
@@ -612,6 +615,11 @@ async function loadOrders() {
   if (!currentUser.value?.id) return
   const gradYear = graduationYearFilter.value === 'all' ? null : graduationYearFilter.value
   allOrders.value = await api.listOrders(currentUser.value.id, search.value, typeFilter.value, gradYear, sortMode.value)
+  const opened = statsOrder.value
+  if (opened?.id === selectedOrderId.value && opened?.userId === currentUser.value?.id) {
+    const updated = allOrders.value.find(order => order.id === opened.id) || await api.getOrder(opened.userId, opened.id)
+    if (statsOrder.value === opened) statsOrder.value = updated || null
+  }
 }
 
 async function loadGraduationYears() {
@@ -713,8 +721,33 @@ function onOrderDeleted() {
 }
 
 function handleSelectOrder(id) {
+  ++statsOrderRequest
+  statsOrder.value = null
   showStats.value = false
   selectedOrderId.value = id
+}
+
+async function handleStatsOrder(id) {
+  if (allOrders.value.some(order => order.id === id)) {
+    handleSelectOrder(id)
+    return
+  }
+
+  const userId = currentUser.value?.id
+  if (!userId) return
+  const request = ++statsOrderRequest
+  try {
+    const order = await api.getOrder(userId, id)
+    if (request !== statsOrderRequest || !showStats.value || currentUser.value?.id !== userId) return
+    if (!order) {
+      ElMessage.warning('这笔订单已不存在')
+      return
+    }
+    handleSelectOrder(id)
+    statsOrder.value = order
+  } catch {
+    if (request === statsOrderRequest && showStats.value) ElMessage.error('无法打开这笔订单')
+  }
 }
 
 function handleDataReset() {

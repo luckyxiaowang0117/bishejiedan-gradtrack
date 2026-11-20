@@ -33,6 +33,13 @@
 | 6.4.1 | `接单管理助手-6.4.1-arm64.dmg` | 2026-11-11 |
 | 6.4.1 | `gradtrack-setup-6.4.1.exe`（Windows x64） | 2026-11-11 |
 | 6.5.0 | `接单管理助手-6.5.0-arm64.dmg` | 2026-11-20 |
+| 6.5.1 | `gradtrack-6.5.1-arm64.dmg`（macOS Apple 芯片版） | 2026-11-20 |
+
+## 6.5.1 更新说明
+
+- 接单人结算可按关联处理人展开订单。本人收益纳入本人接单或本人处理的订单，默认折叠逐笔明细。
+- 精简数据统计页图表，提高浅色与深色模式下本人收益明细文字的可读性。
+- 安装包和完整说明见 [v6.5.1 GitHub Release](https://github.com/luckyxiaowang0117/bishejiedan-gradtrack/releases/tag/v6.5.1)。
 
 ## 6.5.0 更新说明
 

@@ -685,6 +685,47 @@ function getStatsOrderScope({ userId, year, month, graduationYear } = {}) {
   return { filters, params }
 }
 
+function getSettlementStatsOrders(db, filters, params) {
+  const orders = db.prepare(`
+    SELECT id, orderCode, title, orderType, totalAmount, paidAmount, refundAmount,
+      CASE WHEN ${statsOutsourced} THEN dispatchAmount ELSE 0 END as dispatchAmount,
+      CASE WHEN ${statsOutsourced} THEN handlerPaidAmount ELSE 0 END as handlerPaidAmount,
+      ${statsReceiver} as receiver, ${statsHandler} as handler, createdAt
+    FROM Orders${filters}
+    ORDER BY createdAt DESC, id DESC
+  `).all(params)
+
+  const cents = value => Math.round((Number(value) || 0) * 100)
+  return orders.map(order => {
+    const total = cents(order.totalAmount)
+    const paid = cents(order.paidAmount)
+    const refund = cents(order.refundAmount)
+    const dispatch = cents(order.dispatchAmount)
+    const handlerPaid = cents(order.handlerPaidAmount)
+    return {
+      ...order,
+      totalAmount: total / 100,
+      paidAmount: paid / 100,
+      refundAmount: refund / 100,
+      dispatchAmount: dispatch / 100,
+      handlerPaidAmount: handlerPaid / 100,
+      customerDue: Math.max(total - paid, 0) / 100,
+      handlerDue: Math.max(dispatch - handlerPaid, 0) / 100,
+      cashNet: (paid - refund - handlerPaid) / 100,
+      projectedProfit: (total - refund - dispatch) / 100,
+    }
+  })
+}
+
+function getSelfIncomeOrders(db, filters, params) {
+  const scope = `${filters} AND (${statsReceiver} = '本人' OR ${statsHandler} = '本人')`
+  return getSettlementStatsOrders(db, scope, params).map(order => order.receiver === '本人' ? order : {
+    ...order,
+    projectedProfit: order.cashNet,
+    customerDue: 0,
+  })
+}
+
 function getStatsWeek(offset) {
   // Order creation uses UTC, as do the year and month filters.
   const start = new Date()
@@ -1776,7 +1817,6 @@ function registerIpcHandlers() {
   })
 
   ipcMain.handle('stats:getSummary', (_, params) => {
-    const { year, month } = params || {}
     const { filters: w, params: dateParams } = getStatsOrderScope(params)
 
     const totalOrders = db.prepare(`SELECT COUNT(*) as c FROM Orders${w}`).get(dateParams).c
@@ -1828,52 +1868,11 @@ function registerIpcHandlers() {
       FROM Orders${w} AND ${statsOutsourced} AND dispatchAmount > 0
     `).get(dateParams)
 
-    const byReceiver = db.prepare(`
-      SELECT ${statsReceiver} as name,
-        COUNT(*) as count, SUM(totalAmount) as revenue
-      FROM Orders${w} GROUP BY name ORDER BY count DESC, name
+    const receivers = db.prepare(`
+      SELECT DISTINCT ${statsReceiver} as name FROM Orders${w}
     `).all(dateParams)
-
-    const byHandler = db.prepare(`
-      SELECT ${statsHandler} as name,
-        COUNT(*) as count, SUM(totalAmount) as revenue
-      FROM Orders${w} GROUP BY name ORDER BY count DESC, name
-    `).all(dateParams)
-
-    const byUniversity = db.prepare(`
-      SELECT university as name, COUNT(*) as count, SUM(totalAmount) as revenue
-      FROM Orders${w} AND university != ''
-      GROUP BY university ORDER BY count DESC LIMIT 10
-    `).all(dateParams)
-
-    let monthlyTrend
-    if (year && month) {
-      monthlyTrend = db.prepare(`
-        SELECT strftime('%d', createdAt) as day,
-          COUNT(*) as count, SUM(totalAmount) as revenue
-        FROM Orders${w}
-        GROUP BY day ORDER BY day
-      `).all(dateParams)
-    } else if (year) {
-      monthlyTrend = db.prepare(`
-        SELECT strftime('%Y-%m', createdAt) as month,
-          COUNT(*) as count, SUM(totalAmount) as revenue
-        FROM Orders${w}
-        GROUP BY month ORDER BY month
-      `).all(dateParams)
-    } else {
-      monthlyTrend = db.prepare(`
-        SELECT strftime('%Y-%m', createdAt) as month,
-          COUNT(*) as count, SUM(totalAmount) as revenue
-        FROM Orders${w} GROUP BY month ORDER BY month DESC LIMIT 12
-      `).all(dateParams).reverse()
-    }
-
-    const byStatus = db.prepare(`
-      SELECT orderType,
-        SUM(CASE WHEN isDraftSubmitted = 0 THEN 1 ELSE 0 END) as draftPending,
-        SUM(CASE WHEN isDraftSubmitted = 1 THEN 1 ELSE 0 END) as draftDone
-      FROM Orders${w} GROUP BY orderType
+    const handlers = db.prepare(`
+      SELECT DISTINCT ${statsHandler} as name FROM Orders${w}
     `).all(dateParams)
 
     return {
@@ -1893,14 +1892,9 @@ function registerIpcHandlers() {
         unpaidAmount: handlerPayment.unpaidAmount || 0,
       },
       byType,
-      byStatus,
-      byReceiver: byReceiver.slice(0, 10),
-      byHandler: byHandler.slice(0, 10),
-      receiverOptions: statsPersonOptions(byReceiver),
-      handlerOptions: statsPersonOptions(byHandler),
-      byUniversity,
-      monthlyTrend,
-      trendMode: year && month ? 'daily' : 'monthly',
+      receiverOptions: statsPersonOptions(receivers),
+      handlerOptions: statsPersonOptions(handlers),
+      selfIncomeOrders: getSelfIncomeOrders(db, w, dateParams),
     }
   })
 
@@ -1969,14 +1963,7 @@ function registerIpcHandlers() {
     const receiverFilter = `${filters} AND ${statsReceiver} = @receiver`
     const receiverParams = { ...params, receiver }
 
-    const allOrders = db.prepare(`
-      SELECT id, title, orderType, totalAmount, paidAmount,
-        CASE WHEN ${statsOutsourced} THEN dispatchAmount ELSE 0 END as dispatchAmount,
-        CASE WHEN ${statsOutsourced} THEN handlerPaidAmount ELSE 0 END as handlerPaidAmount,
-        ${statsHandler} as handler, createdAt
-      FROM Orders${receiverFilter}
-      ORDER BY createdAt DESC
-    `).all(receiverParams)
+    const allOrders = getSettlementStatsOrders(db, receiverFilter, receiverParams)
 
     const totalStats = db.prepare(`
       SELECT
@@ -1990,16 +1977,23 @@ function registerIpcHandlers() {
       FROM Orders${receiverFilter}
     `).get(receiverParams)
 
-    const byHandler = db.prepare(`
-      SELECT
-        ${statsHandler} as name,
-        COUNT(*) as orderCount,
-        SUM(CASE WHEN ${statsOutsourced} THEN dispatchAmount ELSE 0 END) as totalDispatch,
-        SUM(CASE WHEN ${statsOutsourced} THEN handlerPaidAmount ELSE 0 END) as paidAmount,
-        SUM(CASE WHEN ${statsOutsourced} AND dispatchAmount > 0 THEN dispatchAmount - handlerPaidAmount ELSE 0 END) as unpaidAmount
-      FROM Orders${receiverFilter}
-      GROUP BY name ORDER BY orderCount DESC
-    `).all(receiverParams)
+    const groups = new Map()
+    for (const order of allOrders) {
+      if (!groups.has(order.handler)) {
+        groups.set(order.handler, { name: order.handler, orderCount: 0, totalDispatch: 0, paidAmount: 0, unpaidAmount: 0 })
+      }
+      const group = groups.get(order.handler)
+      group.orderCount++
+      group.totalDispatch += Math.round(order.dispatchAmount * 100)
+      group.paidAmount += Math.round(order.handlerPaidAmount * 100)
+      group.unpaidAmount += Math.round(order.handlerDue * 100)
+    }
+    const byHandler = [...groups.values()].map(group => ({
+      ...group,
+      totalDispatch: group.totalDispatch / 100,
+      paidAmount: group.paidAmount / 100,
+      unpaidAmount: group.unpaidAmount / 100,
+    })).sort((a, b) => b.orderCount - a.orderCount || a.name.localeCompare(b.name, 'zh-CN'))
 
     return {
       allOrders,
