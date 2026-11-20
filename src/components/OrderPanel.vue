@@ -10,7 +10,7 @@
           :style="{ color: orderTypeMeta.color, background: `color-mix(in srgb, ${orderTypeMeta.color} 8%, var(--gt-surface))` }"
         >{{ orderTypeMeta.label }}</span>
         <div class="header-divider" />
-        <span class="created-date">创建于 {{ order.createdAt?.split('T')[0] || '—' }}</span>
+        <span class="created-date">创建于 {{ formatOrderCreatedAt(order.createdAt) }}</span>
       </div>
       <el-button v-if="order.folderPath" @click="handleOpenFolder" class="folder-btn">
         <el-icon><FolderOpened /></el-icon>
@@ -402,6 +402,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { formatOrderCreatedAt } from '../orderCreatedAt.mjs'
 import { orderTypeMeta as orderTypeMap } from '../orderTypeMeta.js'
 import { designStatusClass } from '../designStatus.js'
 import RevisionTracker from './RevisionTracker.vue'

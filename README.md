@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-- 应用版本：`6.5.2`
+- 应用版本：`6.5.3`
 - 技术栈：`Vue 3`、`Vite`、`Electron`、`better-sqlite3`
 
 ## 开发命令
@@ -15,6 +15,10 @@ npm run dev
 npm run build:mac -- --arm64
 npm run build:win
 ```
+
+## 6.5.3 更新说明
+
+- 订单详情的「创建于」统一按北京时间（UTC+8）显示，兼容已有订单。
 
 ## 6.5.2 更新说明
 
